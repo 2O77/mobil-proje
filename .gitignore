@@ -37,6 +37,7 @@ migrate_working_dir/
 .firebase/
 *-debug.log
 firebase-export-*/
+service_account_key.json
 node_modules/
 
 # Symbolication related
