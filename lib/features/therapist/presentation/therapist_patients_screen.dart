@@ -1,7 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/patient_profile_provider.dart';
 import '../../../core/providers/sos_alert_provider.dart';
 import '../../../core/providers/subject_provider.dart';
 import 'patient_detail_screen.dart';
@@ -33,59 +33,76 @@ class TherapistPatientsScreen extends ConsumerWidget {
             itemCount: ids.length,
             itemBuilder: (context, i) {
               final patientId = ids[i];
-              final hasActiveSos = activePatientIds.contains(patientId);
-              return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                future: FirebaseFirestore.instance.collection('users').doc(patientId).get(),
-                builder: (context, snap) {
-                  final data = snap.data?.data();
-                  final displayName = (data?['displayName'] as String?) ?? 'Danışan';
-                  final phone = data?['phoneNumber'] as String?;
-                  final picked = selected == patientId || (selected == null && i == 0);
-                  final avatarText = displayName.isEmpty ? '?' : displayName.substring(0, 1);
-                  return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    color: hasActiveSos ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.35) : null,
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: hasActiveSos ? Theme.of(context).colorScheme.error : null,
-                        child: Text(avatarText),
-                      ),
-                      title: Row(
-                        children: [
-                          Expanded(child: Text(displayName)),
-                          if (hasActiveSos)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.error,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                'SOS aktif',
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onError,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      subtitle: phone != null && phone.isNotEmpty ? Text(phone) : null,
-                      trailing: picked ? const Icon(Icons.check_circle) : const Icon(Icons.chevron_right),
-                      onTap: () {
-                        ref.read(therapistPatientSubjectProvider.notifier).select(patientId);
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => PatientDetailScreen(patientId: patientId)),
-                        );
-                      },
-                    ),
+              return _PatientListTile(
+                patientId: patientId,
+                hasActiveSos: activePatientIds.contains(patientId),
+                picked: selected == patientId || (selected == null && i == 0),
+                onTap: () {
+                  ref.read(therapistPatientSubjectProvider.notifier).select(patientId);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => PatientDetailScreen(patientId: patientId)),
                   );
                 },
               );
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _PatientListTile extends ConsumerWidget {
+  const _PatientListTile({
+    required this.patientId,
+    required this.hasActiveSos,
+    required this.picked,
+    required this.onTap,
+  });
+
+  final String patientId;
+  final bool hasActiveSos;
+  final bool picked;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(patientProfileProvider(patientId));
+    final displayName = profileAsync.value?.displayName ?? 'Danışan';
+    final phone = profileAsync.value?.phoneNumber;
+    final avatarText = displayName.isEmpty ? '?' : displayName.substring(0, 1);
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      color: hasActiveSos ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.35) : null,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: hasActiveSos ? Theme.of(context).colorScheme.error : null,
+          child: Text(avatarText),
+        ),
+        title: Row(
+          children: [
+            Expanded(child: Text(displayName)),
+            if (hasActiveSos)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.error,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'SOS aktif',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onError,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        subtitle: phone != null && phone.isNotEmpty ? Text(phone) : null,
+        trailing: picked ? const Icon(Icons.check_circle) : const Icon(Icons.chevron_right),
+        onTap: onTap,
       ),
     );
   }

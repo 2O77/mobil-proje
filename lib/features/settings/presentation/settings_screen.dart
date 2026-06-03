@@ -8,6 +8,7 @@ import '../../../core/models/user_profile.dart';
 import '../../../core/providers/session_provider.dart';
 import '../../../core/providers/subject_provider.dart';
 import '../../../core/providers/therapists_directory_provider.dart';
+import '../../../core/services/conversation_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -253,6 +254,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
           'linkedTherapistId': _therapistSelection,
         }, SetOptions(merge: true));
+        await ensureTherapistPatientConversation(
+          therapistId: _therapistSelection!,
+          patientId: uid,
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);

@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/user_profile.dart';
+import '../../../core/providers/patient_profile_provider.dart';
 import '../../../core/providers/session_provider.dart';
 import '../../../core/providers/subject_provider.dart';
 import '../../../core/providers/therapist_dashboard_provider.dart';
+import '../../../core/services/conversation_service.dart';
 
 class MessagesScreen extends ConsumerStatefulWidget {
   const MessagesScreen({super.key});
@@ -17,15 +19,12 @@ class MessagesScreen extends ConsumerStatefulWidget {
 }
 
 class _MessagesScreenState extends ConsumerState<MessagesScreen> {
-  Future<String> _openOrCreate(String other) async {
+  Future<String>? _patientConversationFuture;
+
+  Future<String> _openOrCreate(String peerId) async {
     final me = FirebaseAuth.instance.currentUser?.uid;
-    if (me == null || other.isEmpty) return '';
-    final cid = conversationIdFor(me, other);
-    await FirebaseFirestore.instance.collection('conversations').doc(cid).set({
-      'participantIds': [me, other],
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    return cid;
+    if (me == null || peerId.isEmpty) return '';
+    return ensureTherapistPatientConversation(therapistId: peerId, patientId: me);
   }
 
   @override
@@ -40,23 +39,26 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
           if (session == null) return const Center(child: Text('Oturum yok'));
           final role = session.profile?.role;
           if (role == AppUserRole.therapist) {
-            return _TherapistInbox(onOpenChat: (conversationId) {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => ChatThreadScreen(conversationId: conversationId)),
-              );
-            });
+            return _TherapistInbox(
+              onOpenChat: (conversationId) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => ChatThreadScreen(conversationId: conversationId)),
+                );
+              },
+            );
           }
           final peerId = session.profile?.linkedTherapistId;
           if (peerId == null || peerId.isEmpty) {
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(16),
-                child: Text('Aktif mesajlaşma için profilden terapist bağlantısı gerekir.'),
+                child: Text('Aktif mesajlaşma için ayarlardan terapist bağlantısı gerekir.'),
               ),
             );
           }
+          _patientConversationFuture ??= _openOrCreate(peerId);
           return FutureBuilder<String>(
-            future: _openOrCreate(peerId),
+            future: _patientConversationFuture,
             builder: (context, snap) {
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
               final conversationId = snap.data!;
@@ -78,59 +80,54 @@ class _TherapistInbox extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final conversationsAsync = ref.watch(therapistConversationsProvider);
-    final patientsAsync = ref.watch(therapistPatientsProvider);
     return conversationsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Mesajlar alınamadı: $e')),
       data: (conversations) {
-        return patientsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('$e')),
-          data: (patientIds) {
-            if (patientIds.isEmpty) {
-              return const Center(child: Text('Bağlı danışan yok.'));
-            }
-            final byPatient = {for (final c in conversations) c.patientId: c};
-            return ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: patientIds.length,
-              itemBuilder: (_, i) {
-                final patientId = patientIds[i];
-                final conv = byPatient[patientId];
-                final when = conv?.updatedAt == null ? null : DateFormat('dd.MM HH:mm').format(conv!.updatedAt!);
-                return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                  future: FirebaseFirestore.instance.collection('users').doc(patientId).get(),
-                  builder: (context, snap) {
-                    final name = snap.data?.data()?['displayName'] as String? ?? patientId;
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: const Icon(Icons.chat_bubble_outline),
-                        title: Text(name),
-                        subtitle: Text(conv?.lastMessageText ?? 'Mesajlaşmaya başlayın'),
-                        trailing: when == null ? const Icon(Icons.chevron_right) : Text(when, style: Theme.of(context).textTheme.bodySmall),
-                        onTap: () async {
-                          final me = FirebaseAuth.instance.currentUser?.uid;
-                          if (me == null) return;
-                          ref.read(therapistPatientSubjectProvider.notifier).select(patientId);
-                          final cid = conv?.conversationId ?? conversationIdFor(me, patientId);
-                          if (conv == null) {
-                            await FirebaseFirestore.instance.collection('conversations').doc(cid).set({
-                              'participantIds': [me, patientId],
-                              'updatedAt': FieldValue.serverTimestamp(),
-                            }, SetOptions(merge: true));
-                          }
-                          onOpenChat(cid);
-                        },
-                      ),
-                    );
-                  },
-                );
-              },
-            );
+        if (conversations.isEmpty) {
+          return const Center(child: Text('Bağlı danışan yok.'));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: conversations.length,
+          itemBuilder: (_, i) {
+            final conv = conversations[i];
+            final when = conv.updatedAt == null ? null : DateFormat('dd.MM HH:mm').format(conv.updatedAt!);
+            return _InboxTile(conversation: conv, when: when, onOpenChat: onOpenChat);
           },
         );
       },
+    );
+  }
+}
+
+class _InboxTile extends ConsumerWidget {
+  const _InboxTile({
+    required this.conversation,
+    required this.when,
+    required this.onOpenChat,
+  });
+
+  final TherapistConversationPreview conversation;
+  final String? when;
+  final void Function(String conversationId) onOpenChat;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(patientProfileProvider(conversation.patientId));
+    final name = profileAsync.value?.displayName ?? 'Danışan';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: const Icon(Icons.chat_bubble_outline),
+        title: Text(name),
+        subtitle: Text(conversation.lastMessageText ?? 'Mesajlaşmaya başlayın'),
+        trailing: when == null ? const Icon(Icons.chevron_right) : Text(when!, style: Theme.of(context).textTheme.bodySmall),
+        onTap: () {
+          ref.read(therapistPatientSubjectProvider.notifier).select(conversation.patientId);
+          onOpenChat(conversation.conversationId);
+        },
+      ),
     );
   }
 }
@@ -189,8 +186,14 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: q.snapshots(),
             builder: (context, snap) {
+              if (snap.hasError) {
+                return Center(child: Text('Mesajlar alınamadı: ${snap.error}'));
+              }
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
               final docs = snap.data!.docs;
+              if (docs.isEmpty) {
+                return const Center(child: Text('Henüz mesaj yok. İlk mesajı gönderin.'));
+              }
               return ListView.builder(
                 itemCount: docs.length,
                 itemBuilder: (_, i) {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/sos_event.dart';
+import '../../../core/providers/patient_profile_provider.dart';
 import '../../../core/providers/sos_alert_provider.dart';
 
 class TherapistSosAlertBanner extends ConsumerWidget {
@@ -18,6 +19,9 @@ class TherapistSosAlertBanner extends ConsumerWidget {
       data: (events) {
         if (events.isEmpty) return const SizedBox.shrink();
         final latest = events.first;
+        final profileAsync = ref.watch(patientProfileProvider(latest.userId));
+        final name = profileAsync.value?.displayName ?? 'Danışan';
+        final when = latest.createdAt == null ? '' : DateFormat('dd.MM.yyyy HH:mm').format(latest.createdAt!);
         return Material(
           color: Theme.of(context).colorScheme.errorContainer,
           child: Padding(
@@ -37,18 +41,9 @@ class TherapistSosAlertBanner extends ConsumerWidget {
                               color: Theme.of(context).colorScheme.onErrorContainer,
                             ),
                       ),
-                      FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                        future: FirebaseFirestore.instance.collection('users').doc(latest.userId).get(),
-                        builder: (context, snap) {
-                          final name = snap.data?.data()?['displayName'] as String? ?? latest.userId;
-                          final when = latest.createdAt == null
-                              ? ''
-                              : DateFormat('dd.MM.yyyy HH:mm').format(latest.createdAt!);
-                          return Text(
-                            '$name${when.isEmpty ? '' : ' • $when'}',
-                            style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
-                          );
-                        },
+                      Text(
+                        '$name${when.isEmpty ? '' : ' • $when'}',
+                        style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
                       ),
                     ],
                   ),
@@ -131,32 +126,28 @@ class _SosAlertRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final when = event.createdAt == null ? '-' : DateFormat('dd.MM.yyyy HH:mm').format(event.createdAt!);
-    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: FirebaseFirestore.instance.collection('users').doc(event.userId).get(),
-      builder: (context, snap) {
-        final name = snap.data?.data()?['displayName'] as String? ?? event.userId;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '$name • $when',
-                  style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
-                ),
-              ),
-              TextButton(
-                onPressed: () => openTherapistSosAlert(ref, patientId: event.userId),
-                child: const Text('Git'),
-              ),
-              TextButton(
-                onPressed: () => acknowledgeSosEvent(event.id),
-                child: const Text('Görüldü'),
-              ),
-            ],
+    final profileAsync = ref.watch(patientProfileProvider(event.userId));
+    final name = profileAsync.value?.displayName ?? 'Danışan';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '$name • $when',
+              style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
+            ),
           ),
-        );
-      },
+          TextButton(
+            onPressed: () => openTherapistSosAlert(ref, patientId: event.userId),
+            child: const Text('Git'),
+          ),
+          TextButton(
+            onPressed: () => acknowledgeSosEvent(event.id),
+            child: const Text('Görüldü'),
+          ),
+        ],
+      ),
     );
   }
 }

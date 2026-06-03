@@ -1,8 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/providers/patient_profile_provider.dart';
 import '../../../core/providers/sos_alert_provider.dart';
 import '../../../core/providers/subject_provider.dart';
 import '../../../core/providers/therapist_dashboard_provider.dart';
@@ -40,7 +40,7 @@ class TherapistDashboardScreen extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Son mesajlar', style: Theme.of(context).textTheme.titleMedium),
+              Text('Mesajlar', style: Theme.of(context).textTheme.titleMedium),
               TextButton(
                 onPressed: () => ref.read(therapistHomeTabProvider.notifier).select(2),
                 child: const Text('Tümü'),
@@ -56,41 +56,49 @@ class TherapistDashboardScreen extends ConsumerWidget {
                 return const Card(
                   child: Padding(
                     padding: EdgeInsets.all(16),
-                    child: Text('Henüz mesaj yok.'),
+                    child: Text('Bağlı danışan yok.'),
                   ),
                 );
               }
               return Column(
                 children: conversations.take(5).map((c) {
                   final when = c.updatedAt == null ? '' : DateFormat('dd.MM HH:mm').format(c.updatedAt!);
-                  return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                    future: FirebaseFirestore.instance.collection('users').doc(c.patientId).get(),
-                    builder: (context, snap) {
-                      final name = snap.data?.data()?['displayName'] as String? ?? c.patientId;
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: const Icon(Icons.chat_bubble_outline),
-                          title: Text(name),
-                          subtitle: Text(c.lastMessageText ?? 'Mesajlaşmaya başlayın'),
-                          trailing: when.isEmpty ? null : Text(when, style: Theme.of(context).textTheme.bodySmall),
-                          onTap: () {
-                            ref.read(therapistPatientSubjectProvider.notifier).select(c.patientId);
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => ChatThreadScreen(conversationId: c.conversationId),
-                              ),
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  );
+                  return _PatientConversationTile(conversation: c, when: when);
                 }).toList(),
               );
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PatientConversationTile extends ConsumerWidget {
+  const _PatientConversationTile({required this.conversation, required this.when});
+
+  final TherapistConversationPreview conversation;
+  final String when;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(patientProfileProvider(conversation.patientId));
+    final name = profileAsync.value?.displayName ?? 'Danışan';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: const Icon(Icons.chat_bubble_outline),
+        title: Text(name),
+        subtitle: Text(conversation.lastMessageText ?? 'Mesajlaşmaya başlayın'),
+        trailing: when.isEmpty ? null : Text(when, style: Theme.of(context).textTheme.bodySmall),
+        onTap: () {
+          ref.read(therapistPatientSubjectProvider.notifier).select(conversation.patientId);
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ChatThreadScreen(conversationId: conversation.conversationId),
+            ),
+          );
+        },
       ),
     );
   }

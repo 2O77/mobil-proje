@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../services/conversation_service.dart';
+import 'subject_provider.dart';
 
 class TherapistConversationPreview {
   const TherapistConversationPreview({
@@ -21,29 +23,56 @@ final therapistConversationsProvider = StreamProvider<List<TherapistConversation
   final uid = FirebaseAuth.instance.currentUser?.uid;
   if (uid == null) return Stream.value(const []);
 
+  final patientIds = ref.watch(therapistPatientsProvider).value ?? const [];
+  if (patientIds.isNotEmpty) {
+    ensureTherapistPatientConversations(therapistId: uid, patientIds: patientIds);
+  }
+
   return FirebaseFirestore.instance
       .collection('conversations')
       .where('participantIds', arrayContains: uid)
-      .orderBy('updatedAt', descending: true)
-      .limit(20)
       .snapshots()
       .map((snap) {
-    return snap.docs.map((doc) {
+    final byPatient = <String, TherapistConversationPreview>{};
+    for (final doc in snap.docs) {
       final data = doc.data();
       final participants = List<String>.from(data['participantIds'] as List? ?? const []);
       final patientId = participants.firstWhere((id) => id != uid, orElse: () => '');
+      if (patientId.isEmpty) continue;
       final updatedAt = data['updatedAt'];
-      return TherapistConversationPreview(
+      byPatient[patientId] = TherapistConversationPreview(
         conversationId: doc.id,
         patientId: patientId,
         lastMessageText: data['lastMessageText'] as String?,
         updatedAt: updatedAt is Timestamp ? updatedAt.toDate() : null,
       );
-    }).where((c) => c.patientId.isNotEmpty).toList();
+    }
+    if (patientIds.isEmpty) {
+      return byPatient.values.toList()
+        ..sort((a, b) {
+          final aTime = a.updatedAt;
+          final bTime = b.updatedAt;
+          if (aTime == null && bTime == null) return 0;
+          if (aTime == null) return 1;
+          if (bTime == null) return -1;
+          return bTime.compareTo(aTime);
+        });
+    }
+    final items = patientIds.map((patientId) {
+      return byPatient[patientId] ??
+          TherapistConversationPreview(
+            conversationId: conversationIdFor(uid, patientId),
+            patientId: patientId,
+          );
+    }).toList();
+    items.sort((a, b) {
+      final aTime = a.updatedAt;
+      final bTime = b.updatedAt;
+      if (aTime == null && bTime == null) return 0;
+      if (aTime == null) return 1;
+      if (bTime == null) return -1;
+      return bTime.compareTo(aTime);
+    });
+    return items;
   });
 });
-
-String conversationIdFor(String a, String b) {
-  final list = [a, b]..sort();
-  return '${list[0]}__${list[1]}';
-}

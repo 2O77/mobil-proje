@@ -7,9 +7,10 @@ import 'package:intl/intl.dart';
 import '../../../core/models/daily_log.dart';
 import '../../../core/models/sos_event.dart';
 import '../../../core/models/user_profile.dart';
+import '../../../core/providers/patient_profile_provider.dart';
 import '../../../core/providers/sos_alert_provider.dart';
 import '../../../core/providers/subject_provider.dart';
-import '../../../core/providers/therapist_dashboard_provider.dart';
+import '../../../core/services/conversation_service.dart';
 import 'messages_screen.dart';
 
 class PatientDetailScreen extends ConsumerStatefulWidget {
@@ -28,6 +29,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
   void initState() {
     super.initState();
     _tabs = TabController(length: 4, vsync: this);
+    _tabs.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(therapistPatientSubjectProvider.notifier).select(widget.patientId);
     });
@@ -41,61 +43,55 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection('users').doc(widget.patientId).snapshots(),
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
-        }
-        final profile = snap.data!.exists
-            ? UserProfile.fromDoc(widget.patientId, snap.data!.data()!)
-            : UserProfile(uid: widget.patientId);
-        final name = profile.displayName ?? 'Danışan';
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(name),
-            bottom: TabBar(
+    final profileAsync = ref.watch(patientProfileProvider(widget.patientId));
+    final profile = profileAsync.value ?? UserProfile(uid: widget.patientId);
+    final name = profile.displayName ?? 'Danışan';
+    final showClinicalHeader = _tabs.index != 3;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(name),
+        bottom: TabBar(
+          controller: _tabs,
+          tabs: const [
+            Tab(text: 'Günlük'),
+            Tab(text: 'SOS'),
+            Tab(text: 'Raporlar'),
+            Tab(text: 'Mesaj'),
+          ],
+        ),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (showClinicalHeader)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (profile.phoneNumber != null && profile.phoneNumber!.isNotEmpty)
+                    Text('Telefon: ${profile.phoneNumber}'),
+                  if (profile.diagnosisNotes != null && profile.diagnosisNotes!.isNotEmpty)
+                    Text('Tanı: ${profile.diagnosisNotes}'),
+                  if (profile.medications.isNotEmpty)
+                    Text('İlaçlar: ${profile.medications.join(', ')}'),
+                ],
+              ),
+            ),
+          Expanded(
+            child: TabBarView(
               controller: _tabs,
-              tabs: const [
-                Tab(text: 'Günlük'),
-                Tab(text: 'SOS'),
-                Tab(text: 'Raporlar'),
-                Tab(text: 'Mesaj'),
+              children: [
+                _DailyLogsTab(patientId: widget.patientId),
+                _SosTab(patientId: widget.patientId),
+                _ReportsTab(patientId: widget.patientId),
+                _MessageTab(patientId: widget.patientId),
               ],
             ),
           ),
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (profile.phoneNumber != null && profile.phoneNumber!.isNotEmpty)
-                      Text('Telefon: ${profile.phoneNumber}'),
-                    if (profile.diagnosisNotes != null && profile.diagnosisNotes!.isNotEmpty)
-                      Text('Tanı: ${profile.diagnosisNotes}'),
-                    if (profile.medications.isNotEmpty)
-                      Text('İlaçlar: ${profile.medications.join(', ')}'),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabs,
-                  children: [
-                    _DailyLogsTab(patientId: widget.patientId),
-                    _SosTab(patientId: widget.patientId),
-                    _ReportsTab(patientId: widget.patientId),
-                    _MessageTab(patientId: widget.patientId),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
@@ -107,17 +103,17 @@ class _DailyLogsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final query = FirebaseFirestore.instance
-        .collection('daily_logs')
-        .where('userId', isEqualTo: patientId)
-        .orderBy('dateKey', descending: true)
-        .limit(30);
+    final query = FirebaseFirestore.instance.collection('daily_logs').where('userId', isEqualTo: patientId).limit(50);
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: query.snapshots(),
       builder: (context, snap) {
         if (snap.hasError) return Center(child: Text('Günlük kayıtları alınamadı: ${snap.error}'));
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data!.docs;
+        final docs = [...snap.data!.docs]..sort((a, b) {
+            final aKey = a.data()['dateKey'] as String? ?? '';
+            final bKey = b.data()['dateKey'] as String? ?? '';
+            return bKey.compareTo(aKey);
+          });
         if (docs.isEmpty) return const Center(child: Text('Günlük kaydı yok.'));
         return ListView.builder(
           padding: const EdgeInsets.all(12),
@@ -151,17 +147,20 @@ class _SosTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final query = FirebaseFirestore.instance
-        .collection('sos_events')
-        .where('userId', isEqualTo: patientId)
-        .orderBy('createdAt', descending: true)
-        .limit(50);
+    final query = FirebaseFirestore.instance.collection('sos_events').where('userId', isEqualTo: patientId).limit(50);
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: query.snapshots(),
       builder: (context, snap) {
         if (snap.hasError) return Center(child: Text('SOS kayıtları alınamadı: ${snap.error}'));
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final docs = snap.data!.docs;
+        final docs = [...snap.data!.docs]..sort((a, b) {
+            final aTs = a.data()['createdAt'];
+            final bTs = b.data()['createdAt'];
+            if (aTs is! Timestamp && bTs is! Timestamp) return 0;
+            if (aTs is! Timestamp) return 1;
+            if (bTs is! Timestamp) return -1;
+            return bTs.compareTo(aTs);
+          });
         if (docs.isEmpty) return const Center(child: Text('SOS kaydı yok.'));
         return ListView.builder(
           padding: const EdgeInsets.all(12),
@@ -200,16 +199,10 @@ class _ReportsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sessionReportsQuery = FirebaseFirestore.instance
-        .collection('session_reports')
-        .where('subjectUserId', isEqualTo: patientId)
-        .orderBy('createdAt', descending: true)
-        .limit(50);
-    final assessmentsQuery = FirebaseFirestore.instance
-        .collection('assessments')
-        .where('subjectUserId', isEqualTo: patientId)
-        .orderBy('createdAt', descending: true)
-        .limit(50);
+    final sessionReportsQuery =
+        FirebaseFirestore.instance.collection('session_reports').where('subjectUserId', isEqualTo: patientId).limit(50);
+    final assessmentsQuery =
+        FirebaseFirestore.instance.collection('assessments').where('subjectUserId', isEqualTo: patientId).limit(50);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -221,7 +214,14 @@ class _ReportsTab extends StatelessWidget {
           builder: (context, snap) {
             if (snap.hasError) return Text('Seans raporları alınamadı: ${snap.error}');
             if (!snap.hasData) return const LinearProgressIndicator();
-            final docs = snap.data!.docs;
+            final docs = [...snap.data!.docs]..sort((a, b) {
+                final aTs = a.data()['createdAt'];
+                final bTs = b.data()['createdAt'];
+                if (aTs is! Timestamp && bTs is! Timestamp) return 0;
+                if (aTs is! Timestamp) return 1;
+                if (bTs is! Timestamp) return -1;
+                return bTs.compareTo(aTs);
+              });
             if (docs.isEmpty) return const Padding(padding: EdgeInsets.only(bottom: 16), child: Text('Seans raporu yok.'));
             return Column(
               children: docs.map((d) {
@@ -246,7 +246,14 @@ class _ReportsTab extends StatelessWidget {
           builder: (context, snap) {
             if (snap.hasError) return Text('Değerlendirmeler alınamadı: ${snap.error}');
             if (!snap.hasData) return const LinearProgressIndicator();
-            final docs = snap.data!.docs;
+            final docs = [...snap.data!.docs]..sort((a, b) {
+                final aTs = a.data()['createdAt'];
+                final bTs = b.data()['createdAt'];
+                if (aTs is! Timestamp && bTs is! Timestamp) return 0;
+                if (aTs is! Timestamp) return 1;
+                if (bTs is! Timestamp) return -1;
+                return bTs.compareTo(aTs);
+              });
             if (docs.isEmpty) return const Text('Değerlendirme yok.');
             return Column(
               children: docs.map((d) {
@@ -279,35 +286,36 @@ class _MessageTab extends ConsumerStatefulWidget {
 }
 
 class _MessageTabState extends ConsumerState<_MessageTab> {
-  Future<String>? _conversationFuture;
+  String? _conversationId;
+  var _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _conversationFuture = _openOrCreate();
+    _initConversation();
   }
 
-  Future<String> _openOrCreate() async {
+  Future<void> _initConversation() async {
     final me = FirebaseAuth.instance.currentUser?.uid;
-    if (me == null) return '';
-    final cid = conversationIdFor(me, widget.patientId);
-    await FirebaseFirestore.instance.collection('conversations').doc(cid).set({
-      'participantIds': [me, widget.patientId],
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    return cid;
+    if (me == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    final cid = await ensureTherapistPatientConversation(therapistId: me, patientId: widget.patientId);
+    if (mounted) {
+      setState(() {
+        _conversationId = cid;
+        _loading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _conversationFuture,
-      builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final conversationId = snap.data!;
-        if (conversationId.isEmpty) return const Center(child: Text('Mesajlaşma başlatılamadı.'));
-        return ChatThreadScreen(conversationId: conversationId, embed: true);
-      },
-    );
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_conversationId == null || _conversationId!.isEmpty) {
+      return const Center(child: Text('Mesajlaşma başlatılamadı.'));
+    }
+    return ChatThreadScreen(conversationId: _conversationId!, embed: true);
   }
 }
