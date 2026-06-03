@@ -11,11 +11,7 @@ import '../../behavior/presentation/daily_log_screen.dart';
 import '../../calendar/presentation/calendar_hub_screen.dart';
 import '../../settings/presentation/settings_screen.dart';
 import '../../sos/presentation/sos_screen.dart';
-import '../../therapist/presentation/messages_screen.dart';
-import '../../therapist/presentation/therapist_dashboard_screen.dart';
 import '../../therapist/presentation/therapist_patients_screen.dart';
-import '../../therapist/presentation/therapist_sos_alert_widgets.dart';
-import '../../therapist/presentation/therapist_sos_screen.dart';
 import '../../therapist/presentation/therapist_hub_screen.dart';
 
 class HomeShell extends ConsumerWidget {
@@ -102,42 +98,18 @@ class _TherapistHomeShellState extends ConsumerState<TherapistHomeShell> {
   @override
   Widget build(BuildContext context) {
     final index = ref.watch(therapistHomeTabProvider);
-    final activeCount = ref.watch(therapistActiveSosProvider).maybeWhen(data: (d) => d.length, orElse: () => 0);
-    final pages = <Widget>[
-      const TherapistDashboardScreen(),
-      const TherapistPatientsScreen(),
-      const MessagesScreen(),
-      const TherapistSosScreen(),
-      const SettingsScreen(),
+    final pages = const <Widget>[
+      TherapistPatientsScreen(),
+      SettingsScreen(),
     ];
     return Scaffold(
-      body: Column(
-        children: [
-          const TherapistSosAlertBanner(),
-          Expanded(child: IndexedStack(index: index, children: pages)),
-        ],
-      ),
+      body: IndexedStack(index: index.clamp(0, pages.length - 1), children: pages),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
+        selectedIndex: index.clamp(0, 1),
         onDestinationSelected: (i) => ref.read(therapistHomeTabProvider.notifier).select(i),
-        destinations: [
-          const NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Özet'),
-          const NavigationDestination(icon: Icon(Icons.groups_outlined), selectedIcon: Icon(Icons.groups), label: 'Danışanlar'),
-          const NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: 'Mesajlar'),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: activeCount > 0,
-              label: Text('$activeCount'),
-              child: const Icon(Icons.sos_outlined),
-            ),
-            selectedIcon: Badge(
-              isLabelVisible: activeCount > 0,
-              label: Text('$activeCount'),
-              child: const Icon(Icons.sos),
-            ),
-            label: 'SOS',
-          ),
-          const NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Ayarlar'),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.groups_outlined), selectedIcon: Icon(Icons.groups), label: 'Danışanlar'),
+          NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Ayarlar'),
         ],
       ),
     );

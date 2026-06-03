@@ -22,15 +22,31 @@ final therapistActiveSosProvider = StreamProvider<List<SosEvent>>((ref) {
   return FirebaseFirestore.instance
       .collection('sos_events')
       .where('therapistId', isEqualTo: uid)
-      .where('status', isEqualTo: 'active')
-      .orderBy('createdAt', descending: true)
       .snapshots()
-      .map((snap) => snap.docs.map(SosEvent.fromDoc).toList());
+      .map((snap) {
+        final events = snap.docs
+            .map(SosEvent.fromDoc)
+            .where((e) => e.isActive)
+            .toList()
+          ..sort((a, b) {
+            final aTime = a.createdAt;
+            final bTime = b.createdAt;
+            if (aTime == null && bTime == null) return 0;
+            if (aTime == null) return 1;
+            if (bTime == null) return -1;
+            return bTime.compareTo(aTime);
+          });
+        return events;
+      });
 });
 
 final activeSosPatientIdsProvider = Provider<Set<String>>((ref) {
   final events = ref.watch(therapistActiveSosProvider).maybeWhen(data: (d) => d, orElse: () => const <SosEvent>[]);
   return events.map((e) => e.userId).toSet();
+});
+
+final patientHasActiveSosProvider = Provider.family<bool, String>((ref, patientId) {
+  return ref.watch(activeSosPatientIdsProvider).contains(patientId);
 });
 
 Future<void> acknowledgeSosEvent(String eventId) async {
@@ -45,5 +61,5 @@ Future<void> acknowledgeSosEvent(String eventId) async {
 
 void openTherapistSosAlert(WidgetRef ref, {required String patientId}) {
   ref.read(therapistPatientSubjectProvider.notifier).select(patientId);
-  ref.read(therapistHomeTabProvider.notifier).select(3);
+  ref.read(therapistHomeTabProvider.notifier).select(0);
 }

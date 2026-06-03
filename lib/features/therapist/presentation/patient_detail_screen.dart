@@ -10,6 +10,7 @@ import '../../../core/models/user_profile.dart';
 import '../../../core/providers/patient_profile_provider.dart';
 import '../../../core/providers/sos_alert_provider.dart';
 import '../../../core/providers/subject_provider.dart';
+import 'sos_pulse_indicator.dart';
 import '../../../core/services/conversation_service.dart';
 import 'messages_screen.dart';
 
@@ -47,10 +48,18 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
     final profile = profileAsync.value ?? UserProfile(uid: widget.patientId);
     final name = profile.displayName ?? 'Danışan';
     final showClinicalHeader = _tabs.index != 3;
+    final hasActiveSos = ref.watch(patientHasActiveSosProvider(widget.patientId));
 
     return Scaffold(
       appBar: AppBar(
         title: Text(name),
+        actions: [
+          if (hasActiveSos)
+            const Padding(
+              padding: EdgeInsets.only(right: 16),
+              child: Center(child: SosPulseIndicator()),
+            ),
+        ],
         bottom: TabBar(
           controller: _tabs,
           tabs: const [
@@ -316,6 +325,6 @@ class _MessageTabState extends ConsumerState<_MessageTab> {
     if (_conversationId == null || _conversationId!.isEmpty) {
       return const Center(child: Text('Mesajlaşma başlatılamadı.'));
     }
-    return ChatThreadScreen(conversationId: _conversationId!, embed: true);
+    return ChatThreadScreen(conversationId: _conversationId!, embed: true, readOnly: true);
   }
 }

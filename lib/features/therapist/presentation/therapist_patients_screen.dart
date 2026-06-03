@@ -5,6 +5,7 @@ import '../../../core/providers/patient_profile_provider.dart';
 import '../../../core/providers/sos_alert_provider.dart';
 import '../../../core/providers/subject_provider.dart';
 import 'patient_detail_screen.dart';
+import 'sos_pulse_indicator.dart';
 
 class TherapistPatientsScreen extends ConsumerWidget {
   const TherapistPatientsScreen({super.key});
@@ -14,6 +15,7 @@ class TherapistPatientsScreen extends ConsumerWidget {
     final patientsAsync = ref.watch(therapistPatientsProvider);
     final selected = ref.watch(therapistPatientSubjectProvider);
     final activePatientIds = ref.watch(activeSosPatientIdsProvider);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Danışanlarım')),
       body: patientsAsync.when(
@@ -28,11 +30,17 @@ class TherapistPatientsScreen extends ConsumerWidget {
               ),
             );
           }
+          final sortedIds = [...ids]..sort((a, b) {
+              final aSos = activePatientIds.contains(a);
+              final bSos = activePatientIds.contains(b);
+              if (aSos == bSos) return 0;
+              return aSos ? -1 : 1;
+            });
           return ListView.builder(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-            itemCount: ids.length,
+            itemCount: sortedIds.length,
             itemBuilder: (context, i) {
-              final patientId = ids[i];
+              final patientId = sortedIds[i];
               return _PatientListTile(
                 patientId: patientId,
                 hasActiveSos: activePatientIds.contains(patientId),
@@ -71,38 +79,28 @@ class _PatientListTile extends ConsumerWidget {
     final displayName = profileAsync.value?.displayName ?? 'Danışan';
     final phone = profileAsync.value?.phoneNumber;
     final avatarText = displayName.isEmpty ? '?' : displayName.substring(0, 1);
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      color: hasActiveSos ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.35) : null,
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: hasActiveSos ? Theme.of(context).colorScheme.error : null,
-          child: Text(avatarText),
-        ),
-        title: Row(
-          children: [
-            Expanded(child: Text(displayName)),
-            if (hasActiveSos)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.error,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'SOS aktif',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onError,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-          ],
-        ),
-        subtitle: phone != null && phone.isNotEmpty ? Text(phone) : null,
-        trailing: picked ? const Icon(Icons.check_circle) : const Icon(Icons.chevron_right),
-        onTap: onTap,
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Card(
+            child: ListTile(
+              leading: CircleAvatar(child: Text(avatarText)),
+              title: Text(displayName),
+              subtitle: phone != null && phone.isNotEmpty ? Text(phone) : null,
+              trailing: picked ? const Icon(Icons.check_circle) : const Icon(Icons.chevron_right),
+              onTap: onTap,
+            ),
+          ),
+          if (hasActiveSos)
+            const Positioned(
+              top: 10,
+              right: 10,
+              child: SosPulseIndicator(),
+            ),
+        ],
       ),
     );
   }
