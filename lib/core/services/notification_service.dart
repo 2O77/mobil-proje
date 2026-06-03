@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -12,32 +14,56 @@ class NotificationService {
     priority: Priority.high,
   );
 
+  static AndroidFlutterLocalNotificationsPlugin? get _android =>
+      _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
   static Future<void> init() async {
     tzdata.initializeTimeZones();
-    tz.setLocalLocation(tz.getLocation('Europe/Istanbul'));
+    try {
+      tz.setLocalLocation(tz.getLocation('Europe/Istanbul'));
+    } catch (_) {
+      tz.setLocalLocation(tz.UTC);
+    }
     await _plugin.initialize(
-      settings: InitializationSettings(
-        android: const AndroidInitializationSettings('@mipmap/ic_launcher'),
-        iOS: const DarwinInitializationSettings(),
+      settings: const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(),
       ),
     );
-    await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
-    await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(
-          const AndroidNotificationChannel(
-            'sos',
-            'SOS Alarmları',
-            description: 'Danışan SOS bildirimleri',
-            importance: Importance.max,
-          ),
-        );
-    await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(
-          const AndroidNotificationChannel(
-            'medications',
-            'İlaçlar',
-            description: 'Günlük ilaç hatırlatmaları',
-            importance: Importance.max,
-          ),
-        );
+    await _android?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'sos',
+        'SOS Alarmları',
+        description: 'Danışan SOS bildirimleri',
+        importance: Importance.max,
+      ),
+    );
+    await _android?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'medications',
+        'İlaçlar',
+        description: 'Günlük ilaç hatırlatmaları',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      ),
+    );
+  }
+
+  static Future<bool> ensureMedicationPermissions() async {
+    final androidGranted = await _android?.requestNotificationsPermission() ?? true;
+    if (!androidGranted) return false;
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final exactStatus = await Permission.scheduleExactAlarm.status;
+      if (!exactStatus.isGranted) {
+        final result = await Permission.scheduleExactAlarm.request();
+        if (!result.isGranted) {
+          await _android?.requestExactAlarmsPermission();
+        }
+      }
+    }
+    return true;
   }
 
   static Future<void> showSosAlert({required String title, required String body, String? payload}) async {
@@ -46,9 +72,9 @@ class NotificationService {
       title: title,
       body: body,
       payload: payload,
-      notificationDetails: NotificationDetails(
+      notificationDetails: const NotificationDetails(
         android: _sosChannel,
-        iOS: const DarwinNotificationDetails(),
+        iOS: DarwinNotificationDetails(),
       ),
     );
   }
@@ -63,26 +89,37 @@ class NotificationService {
     channelDescription: 'Günlük ilaç hatırlatmaları',
     importance: Importance.max,
     priority: Priority.high,
+    playSound: true,
+    enableVibration: true,
+    category: AndroidNotificationCategory.reminder,
   );
 
   static Future<void> scheduleMedication(int id, String title, int hour, int minute) async {
-    final now = DateTime.now();
-    var next = DateTime(now.year, now.month, now.day, hour, minute);
-    if (!next.isAfter(now)) {
-      next = next.add(const Duration(days: 1));
+    final when = tz.TZDateTime(tz.local, tz.TZDateTime.now(tz.local).year, tz.TZDateTime.now(tz.local).month,
+        tz.TZDateTime.now(tz.local).day, hour, minute);
+    final scheduled = when.isBefore(tz.TZDateTime.now(tz.local)) ? when.add(const Duration(days: 1)) : when;
+
+    Future<void> scheduleWith(AndroidScheduleMode mode) async {
+      await _plugin.zonedSchedule(
+        id: id,
+        scheduledDate: scheduled,
+        notificationDetails: const NotificationDetails(
+          android: _medChannel,
+          iOS: DarwinNotificationDetails(),
+        ),
+        androidScheduleMode: mode,
+        title: 'İlaç hatırlatıcı',
+        body: '$title — ilacını alma saati',
+        matchDateTimeComponents: DateTimeComponents.time,
+      );
     }
-    final when = tz.TZDateTime.from(next, tz.local);
-    await _plugin.zonedSchedule(
-      id: id,
-      scheduledDate: when,
-      notificationDetails: const NotificationDetails(
-        android: _medChannel,
-        iOS: DarwinNotificationDetails(),
-      ),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      title: 'İlaç hatırlatıcı',
-      body: '$title — ilacını alma saati',
-      matchDateTimeComponents: DateTimeComponents.time,
-    );
+
+    try {
+      await scheduleWith(AndroidScheduleMode.exactAllowWhileIdle);
+    } catch (e) {
+      debugPrint('Exact alarm schedule failed, fallback inexact: $e');
+      await scheduleWith(AndroidScheduleMode.inexactAllowWhileIdle);
+    }
+    debugPrint('Medication scheduled id=$id at ${scheduled.hour}:${scheduled.minute.toString().padLeft(2, '0')}');
   }
 }

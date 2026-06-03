@@ -8,6 +8,8 @@ import '../../../core/models/medication.dart';
 import '../../../core/models/routine.dart';
 import '../../../core/providers/subject_provider.dart';
 import '../../../core/services/medication_notification_service.dart';
+import '../../../core/services/medication_reminder_init.dart';
+import '../../../core/services/notification_service.dart';
 
 class CalendarHubScreen extends ConsumerStatefulWidget {
   const CalendarHubScreen({super.key});
@@ -133,6 +135,14 @@ class _MedicationsTab extends ConsumerStatefulWidget {
 
 class _MedicationsTabState extends ConsumerState<_MedicationsTab> {
   String? _lastSyncKey;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await NotificationService.ensureMedicationPermissions();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -275,10 +285,16 @@ class _MedicationsTabState extends ConsumerState<_MedicationsTab> {
       name: name.text.trim(),
       times: times,
     );
-    await MedicationNotificationService.schedule(med);
+    final scheduled = await scheduleMedicationReminders(med);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${med.name} için ${times.length} hatırlatıcı ayarlandı')),
+      SnackBar(
+        content: Text(
+          scheduled
+              ? '${med.name} için ${times.length} hatırlatıcı ayarlandı'
+              : 'İlaç kaydedildi ama bildirim izni yok. Ayarlardan bildirim ve alarm iznini açın.',
+        ),
+      ),
     );
   }
 }
