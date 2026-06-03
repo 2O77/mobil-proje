@@ -1,0 +1,17 @@
+{
+  "name": "auticare-firebase",
+  "private": true,
+  "scripts": {
+    "seed:therapists": "node firebase/scripts/seed-therapists.mjs",
+    "firebase": "firebase",
+    "firebase:login": "firebase login",
+    "firebase:deploy:rules": "firebase deploy --only firestore:rules",
+    "firebase:deploy:indexes": "firebase deploy --only firestore:indexes",
+    "firebase:deploy:firestore": "firebase deploy --only firestore",
+    "firebase:deploy:functions": "firebase deploy --only functions"
+  },
+  "devDependencies": {
+    "firebase-admin": "^10.1.0",
+    "firebase-tools": "^1.2.0"
+  }
+}

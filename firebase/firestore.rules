@@ -1,0 +1,168 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+    function userExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+    function userData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+    function isCaregiverOf(childId) {
+      return signedIn() && userExists(childId)
+        && 'caregiverIds' in userData(childId)
+        && request.auth.uid in userData(childId).caregiverIds;
+    }
+    function isTherapistOf(patientId) {
+      return signedIn() && userExists(patientId)
+        && 'linkedTherapistId' in userData(patientId)
+        && userData(patientId).linkedTherapistId == request.auth.uid;
+    }
+    function canAccessPatient(patientId) {
+      return isSelf(patientId) || isCaregiverOf(patientId) || isTherapistOf(patientId);
+    }
+    function isTherapistUser(uid) {
+      return userExists(uid)
+        && 'role' in userData(uid)
+        && userData(uid).role == 'therapist';
+    }
+    function conversationHasTwoParticipants(data) {
+      return 'participantIds' in data
+        && data.participantIds is list
+        && data.participantIds.size() == 2;
+    }
+    function conversationPeer(data, uid) {
+      return data.participantIds[0] == uid
+        ? data.participantIds[1]
+        : data.participantIds[0];
+    }
+    function hasActiveTherapyLink(patientId, therapistId) {
+      return userExists(patientId)
+        && 'linkedTherapistId' in userData(patientId)
+        && userData(patientId).linkedTherapistId == therapistId;
+    }
+    function canAccessConversation(data) {
+      return signedIn()
+        && conversationHasTwoParticipants(data)
+        && request.auth.uid in data.participantIds
+        && (
+          isTherapistUser(request.auth.uid)
+            ? hasActiveTherapyLink(conversationPeer(data, request.auth.uid), request.auth.uid)
+            : hasActiveTherapyLink(request.auth.uid, conversationPeer(data, request.auth.uid))
+        );
+    }
+
+    function clientClaimsTherapistOnCreate() {
+      return 'role' in request.resource.data && request.resource.data.role == 'therapist';
+    }
+    function clientEscalatesToTherapist() {
+      return request.resource.data.role == 'therapist'
+        && (!('role' in resource.data) || resource.data.role != 'therapist');
+    }
+
+    match /therapists/{therapistId} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (
+        request.auth.uid == userId
+        || ('caregiverIds' in resource.data && request.auth.uid in resource.data.caregiverIds)
+        || ('linkedTherapistId' in resource.data && resource.data.linkedTherapistId == request.auth.uid)
+      );
+      allow create: if signedIn() && isSelf(userId) && !clientClaimsTherapistOnCreate();
+      allow update: if signedIn() && isSelf(userId) && !clientEscalatesToTherapist();
+    }
+
+    match /daily_logs/{logId} {
+      allow read: if signedIn() && canAccessPatient(resource.data.userId);
+      allow create: if signedIn() && canAccessPatient(request.resource.data.userId);
+      allow update, delete: if signedIn() && canAccessPatient(resource.data.userId);
+    }
+
+    match /routines/{routineId} {
+      allow read: if signedIn() && canAccessPatient(resource.data.userId);
+      allow create: if signedIn() && canAccessPatient(request.resource.data.userId);
+      allow update, delete: if signedIn() && canAccessPatient(resource.data.userId);
+    }
+
+    match /medications/{medId} {
+      allow read: if signedIn() && canAccessPatient(resource.data.userId);
+      allow create: if signedIn() && canAccessPatient(request.resource.data.userId);
+      allow update, delete: if signedIn() && canAccessPatient(resource.data.userId);
+    }
+
+    match /conversations/{convId} {
+      allow read: if canAccessConversation(resource.data);
+      allow create: if canAccessConversation(request.resource.data);
+      allow update: if canAccessConversation(resource.data) && canAccessConversation(request.resource.data);
+
+      match /messages/{msgId} {
+        allow read: if canAccessConversation(
+          get(/databases/$(database)/documents/conversations/$(convId)).data
+        );
+        allow create: if canAccessConversation(
+            get(/databases/$(database)/documents/conversations/$(convId)).data
+          )
+          && request.resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    function sosTherapistIdMatchesPatient(data) {
+      return !('therapistId' in data)
+        || data.therapistId == null
+        || (
+          userExists(data.userId)
+          && 'linkedTherapistId' in userData(data.userId)
+          && userData(data.userId).linkedTherapistId == data.therapistId
+        );
+    }
+    function sosAcknowledgeUpdate() {
+      return resource.data.status == 'active'
+        && request.resource.data.status == 'acknowledged'
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'status', 'acknowledgedAt', 'acknowledgedBy'
+        ])
+        && request.resource.data.acknowledgedBy == request.auth.uid
+        && request.resource.data.acknowledgedAt is timestamp;
+    }
+
+    match /sos_events/{eventId} {
+      allow read: if signedIn() && (
+        resource.data.userId == request.auth.uid
+        || isCaregiverOf(resource.data.userId)
+        || isTherapistOf(resource.data.userId)
+      );
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'active'
+        && sosTherapistIdMatchesPatient(request.resource.data);
+      allow update: if signedIn()
+        && isTherapistOf(resource.data.userId)
+        && sosAcknowledgeUpdate();
+    }
+
+    match /assessments/{id} {
+      allow read: if signedIn() && canAccessPatient(resource.data.subjectUserId);
+      allow create: if signedIn() && canAccessPatient(request.resource.data.subjectUserId);
+      allow update, delete: if signedIn() && canAccessPatient(resource.data.subjectUserId);
+    }
+
+    match /session_reports/{id} {
+      allow read: if signedIn() && canAccessPatient(resource.data.subjectUserId);
+      allow create: if signedIn()
+        && canAccessPatient(request.resource.data.subjectUserId)
+        && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.authorId == request.auth.uid;
+    }
+  }
+}
