@@ -59,6 +59,15 @@ Future<void> acknowledgeSosEvent(String eventId) async {
   });
 }
 
+Future<bool> tryAcknowledgeSosEvent(String eventId) async {
+  try {
+    await acknowledgeSosEvent(eventId);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 void openTherapistSosAlert(WidgetRef ref, {required String patientId}) {
   ref.read(therapistPatientSubjectProvider.notifier).select(patientId);
   ref.read(therapistHomeTabProvider.notifier).select(0);

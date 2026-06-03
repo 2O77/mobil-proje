@@ -125,15 +125,13 @@ service cloud.firestore {
         );
     }
     function sosAcknowledgeUpdate() {
-      return resource.data.status == 'active'
+      return (resource.data.status == 'active' || !('status' in resource.data))
         && request.resource.data.status == 'acknowledged'
         && request.resource.data.userId == resource.data.userId
-        && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
           'status', 'acknowledgedAt', 'acknowledgedBy'
         ])
-        && request.resource.data.acknowledgedBy == request.auth.uid
-        && request.resource.data.acknowledgedAt is timestamp;
+        && request.resource.data.acknowledgedBy == request.auth.uid;
     }
 
     match /sos_events/{eventId} {

@@ -84,7 +84,9 @@ class _PatientMessagesScreen extends ConsumerWidget {
               ),
             );
           }
-          return ChatThreadScreen(conversationId: conversationId, embed: true);
+          return SizedBox.expand(
+            child: ChatThreadScreen(conversationId: conversationId, embed: true),
+          );
         },
       ),
     );
@@ -270,41 +272,44 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
           ),
         ),
         if (!widget.readOnly)
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _text,
-                      minLines: 1,
-                      maxLines: 4,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: widget.readOnly ? null : (_) => _send(),
-                      decoration: const InputDecoration(
-                        hintText: 'Mesaj yazın',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          Material(
+            elevation: 8,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _text,
+                        minLines: 1,
+                        maxLines: 4,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _send(),
+                        decoration: const InputDecoration(
+                          hintText: 'Mesaj yazın',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: _sending ? null : _send,
-                    icon: _sending
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.send),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      onPressed: _sending ? null : _send,
+                      icon: _sending
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.send),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
       ],
     );
-    if (widget.embed) return chatBody;
+    if (widget.embed) return SizedBox.expand(child: chatBody);
     return Scaffold(
       appBar: AppBar(title: const Text('Sohbet')),
       resizeToAvoidBottomInset: true,

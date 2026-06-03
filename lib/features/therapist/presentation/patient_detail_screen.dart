@@ -51,6 +51,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
     final hasActiveSos = ref.watch(patientHasActiveSosProvider(widget.patientId));
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Text(name),
         actions: [
@@ -89,8 +90,8 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
               ),
             ),
           Expanded(
-            child: TabBarView(
-              controller: _tabs,
+            child: IndexedStack(
+              index: _tabs.index,
               children: [
                 _DailyLogsTab(patientId: widget.patientId),
                 _SosTab(patientId: widget.patientId),
@@ -190,7 +191,18 @@ class _SosTab extends ConsumerWidget {
                 title: Text(isActive ? 'Aktif SOS — $when' : 'Kayıt — $when'),
                 subtitle: Text(loc),
                 trailing: isActive
-                    ? TextButton(onPressed: () => acknowledgeSosEvent(event.id), child: const Text('Görüldü'))
+                    ? TextButton(
+                        onPressed: () async {
+                          final ok = await tryAcknowledgeSosEvent(event.id);
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(ok ? 'SOS görüldü olarak işaretlendi' : 'SOS güncellenemedi'),
+                            ),
+                          );
+                        },
+                        child: const Text('Görüldü'),
+                      )
                     : null,
               ),
             );
@@ -325,6 +337,8 @@ class _MessageTabState extends ConsumerState<_MessageTab> {
     if (_conversationId == null || _conversationId!.isEmpty) {
       return const Center(child: Text('Mesajlaşma başlatılamadı.'));
     }
-    return ChatThreadScreen(conversationId: _conversationId!, embed: true, readOnly: true);
+    return SizedBox.expand(
+      child: ChatThreadScreen(conversationId: _conversationId!, embed: true),
+    );
   }
 }
