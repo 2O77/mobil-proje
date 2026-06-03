@@ -9,7 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/providers/session_provider.dart';
+import '../../../core/providers/patient_profile_provider.dart';
 import '../../../core/providers/subject_provider.dart';
 
 class SosScreen extends ConsumerStatefulWidget {
@@ -61,14 +61,15 @@ class _SosScreenState extends ConsumerState<SosScreen> {
   Future<void> _sendSos() async {
     final me = FirebaseAuth.instance.currentUser?.uid;
     if (me == null) return;
-    final therapistId = ref.read(sessionStreamProvider).value?.profile?.linkedTherapistId;
+    final subjectId = ref.read(effectiveSubjectIdProvider) ?? me;
+    final therapistId = ref.read(patientProfileProvider(subjectId)).value?.linkedTherapistId;
     final perm = await Geolocator.requestPermission();
     Position? pos;
     if (perm == LocationPermission.always || perm == LocationPermission.whileInUse) {
       pos = await Geolocator.getCurrentPosition();
     }
     final payload = <String, dynamic>{
-      'userId': me,
+      'userId': subjectId,
       'status': 'active',
       'lat': pos?.latitude,
       'lng': pos?.longitude,

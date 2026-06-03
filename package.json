@@ -11,7 +11,7 @@
     "firebase:deploy:functions": "firebase deploy --only functions"
   },
   "devDependencies": {
-    "firebase-admin": "^10.1.0",
-    "firebase-tools": "^1.2.0"
+    "firebase-admin": "^12.7.0",
+    "firebase-tools": "^13.35.1"
   }
 }

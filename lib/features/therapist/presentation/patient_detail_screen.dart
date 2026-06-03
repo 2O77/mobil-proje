@@ -193,11 +193,15 @@ class _SosTab extends ConsumerWidget {
                 trailing: isActive
                     ? TextButton(
                         onPressed: () async {
-                          final ok = await tryAcknowledgeSosEvent(event.id);
+                          final result = await tryAcknowledgeSosEvent(event.id);
                           if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(ok ? 'SOS görüldü olarak işaretlendi' : 'SOS güncellenemedi'),
+                              content: Text(
+                                result.ok
+                                    ? 'SOS görüldü olarak işaretlendi'
+                                    : 'SOS güncellenemedi: ${result.error ?? 'bilinmeyen hata'}',
+                              ),
                             ),
                           );
                         },

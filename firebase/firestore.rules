@@ -115,6 +115,10 @@ service cloud.firestore {
       }
     }
 
+    function isAssignedTherapistOfSos(data) {
+      return ('therapistId' in data && data.therapistId == request.auth.uid)
+        || isTherapistOf(data.userId);
+    }
     function sosTherapistIdMatchesPatient(data) {
       return !('therapistId' in data)
         || data.therapistId == null
@@ -128,24 +132,24 @@ service cloud.firestore {
       return (resource.data.status == 'active' || !('status' in resource.data))
         && request.resource.data.status == 'acknowledged'
         && request.resource.data.userId == resource.data.userId
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          'status', 'acknowledgedAt', 'acknowledgedBy'
-        ])
-        && request.resource.data.acknowledgedBy == request.auth.uid;
+        && request.resource.data.acknowledgedBy == request.auth.uid
+        && !request.resource.data.diff(resource.data).changedKeys().hasAny([
+          'userId', 'therapistId', 'createdAt', 'lat', 'lng'
+        ]);
     }
 
     match /sos_events/{eventId} {
       allow read: if signedIn() && (
         resource.data.userId == request.auth.uid
         || isCaregiverOf(resource.data.userId)
-        || isTherapistOf(resource.data.userId)
+        || isAssignedTherapistOfSos(resource.data)
       );
       allow create: if signedIn()
-        && request.resource.data.userId == request.auth.uid
+        && canAccessPatient(request.resource.data.userId)
         && request.resource.data.status == 'active'
         && sosTherapistIdMatchesPatient(request.resource.data);
       allow update: if signedIn()
-        && isTherapistOf(resource.data.userId)
+        && isAssignedTherapistOfSos(resource.data)
         && sosAcknowledgeUpdate();
     }
 

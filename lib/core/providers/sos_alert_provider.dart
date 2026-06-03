@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/sos_event.dart';
@@ -14,30 +15,41 @@ class TherapistHomeTab extends Notifier<int> {
 
 final therapistHomeTabProvider = NotifierProvider<TherapistHomeTab, int>(TherapistHomeTab.new);
 
+List<SosEvent> _activeEventsFromDocs(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+  final events = docs.map(SosEvent.fromDoc).where((e) => e.isActive).toList()
+    ..sort((a, b) {
+      final aTime = a.createdAt;
+      final bTime = b.createdAt;
+      if (aTime == null && bTime == null) return 0;
+      if (aTime == null) return 1;
+      if (bTime == null) return -1;
+      return bTime.compareTo(aTime);
+    });
+  return events;
+}
+
 final therapistActiveSosProvider = StreamProvider<List<SosEvent>>((ref) {
   final uid = FirebaseAuth.instance.currentUser?.uid;
   if (uid == null) {
     return Stream.value(const []);
   }
-  return FirebaseFirestore.instance
-      .collection('sos_events')
-      .where('therapistId', isEqualTo: uid)
-      .snapshots()
-      .map((snap) {
-        final events = snap.docs
-            .map(SosEvent.fromDoc)
-            .where((e) => e.isActive)
-            .toList()
-          ..sort((a, b) {
-            final aTime = a.createdAt;
-            final bTime = b.createdAt;
-            if (aTime == null && bTime == null) return 0;
-            if (aTime == null) return 1;
-            if (bTime == null) return -1;
-            return bTime.compareTo(aTime);
-          });
-        return events;
-      });
+
+  final patientsAsync = ref.watch(therapistPatientsProvider);
+  return patientsAsync.when(
+    data: (patientIds) {
+      if (patientIds.isEmpty) {
+        return Stream.value(const []);
+      }
+      final queryIds = patientIds.length > 30 ? patientIds.sublist(0, 30) : patientIds;
+      return FirebaseFirestore.instance
+          .collection('sos_events')
+          .where('userId', whereIn: queryIds)
+          .snapshots()
+          .map((snap) => _activeEventsFromDocs(snap.docs));
+    },
+    loading: () => Stream.value(const []),
+    error: (e, _) => Stream.error(e),
+  );
 });
 
 final activeSosPatientIdsProvider = Provider<Set<String>>((ref) {
@@ -59,12 +71,13 @@ Future<void> acknowledgeSosEvent(String eventId) async {
   });
 }
 
-Future<bool> tryAcknowledgeSosEvent(String eventId) async {
+Future<({bool ok, String? error})> tryAcknowledgeSosEvent(String eventId) async {
   try {
     await acknowledgeSosEvent(eventId);
-    return true;
-  } catch (_) {
-    return false;
+    return (ok: true, error: null);
+  } catch (e, st) {
+    debugPrint('SOS acknowledge failed: $e\n$st');
+    return (ok: false, error: e.toString());
   }
 }
 
