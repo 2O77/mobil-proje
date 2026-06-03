@@ -13,6 +13,7 @@ import '../../../core/providers/subject_provider.dart';
 import 'sos_pulse_indicator.dart';
 import '../../../core/services/conversation_service.dart';
 import 'messages_screen.dart';
+import 'session_report_card.dart';
 
 class PatientDetailScreen extends ConsumerStatefulWidget {
   const PatientDetailScreen({super.key, required this.patientId});
@@ -249,17 +250,7 @@ class _ReportsTab extends StatelessWidget {
               });
             if (docs.isEmpty) return const Padding(padding: EdgeInsets.only(bottom: 16), child: Text('Seans raporu yok.'));
             return Column(
-              children: docs.map((d) {
-                final data = d.data();
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: const Icon(Icons.description_outlined),
-                    title: Text((data['title'] as String?) ?? 'Rapor'),
-                    subtitle: Text((data['body'] as String?) ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
-                  ),
-                );
-              }).toList(),
+              children: docs.map((d) => SessionReportCard.fromDoc(d)).toList(),
             );
           },
         ),

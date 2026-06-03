@@ -24,8 +24,8 @@ class TherapistHubScreen extends StatelessWidget {
           _tile(
             context,
             icon: Icons.picture_as_pdf_outlined,
-            title: 'Seans notu PDF',
-            subtitle: 'Dışa aktarma ve paylaşım',
+            title: 'Seans raporları',
+            subtitle: 'Kayıtlı raporları görüntüle ve PDF indir',
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SessionPdfScreen())),
           ),
           _tile(
