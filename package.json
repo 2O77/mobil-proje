@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "seed:therapists": "node firebase/scripts/seed-therapists.mjs",
+    "clear:medications": "node firebase/scripts/clear-medications.mjs",
     "firebase": "firebase",
     "firebase:login": "firebase login",
     "firebase:deploy:rules": "firebase deploy --only firestore:rules",

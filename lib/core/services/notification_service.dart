@@ -30,6 +30,14 @@ class NotificationService {
             importance: Importance.max,
           ),
         );
+    await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(
+          const AndroidNotificationChannel(
+            'medications',
+            'İlaçlar',
+            description: 'Günlük ilaç hatırlatmaları',
+            importance: Importance.max,
+          ),
+        );
   }
 
   static Future<void> showSosAlert({required String title, required String body, String? payload}) async {
@@ -45,6 +53,18 @@ class NotificationService {
     );
   }
 
+  static Future<void> cancel(int id) async {
+    await _plugin.cancel(id: id);
+  }
+
+  static const _medChannel = AndroidNotificationDetails(
+    'medications',
+    'İlaçlar',
+    channelDescription: 'Günlük ilaç hatırlatmaları',
+    importance: Importance.max,
+    priority: Priority.high,
+  );
+
   static Future<void> scheduleMedication(int id, String title, int hour, int minute) async {
     final now = DateTime.now();
     var next = DateTime(now.year, now.month, now.day, hour, minute);
@@ -55,19 +75,13 @@ class NotificationService {
     await _plugin.zonedSchedule(
       id: id,
       scheduledDate: when,
-      notificationDetails: NotificationDetails(
-        android: AndroidNotificationDetails(
-          'medications',
-          'İlaçlar',
-          channelDescription: 'Günlük ilaç hatırlatmaları',
-          importance: Importance.max,
-          priority: Priority.high,
-        ),
-        iOS: const DarwinNotificationDetails(),
+      notificationDetails: const NotificationDetails(
+        android: _medChannel,
+        iOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       title: 'İlaç hatırlatıcı',
-      body: title,
+      body: '$title — ilacını alma saati',
       matchDateTimeComponents: DateTimeComponents.time,
     );
   }

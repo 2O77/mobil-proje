@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/models/medication.dart';
 import '../../../core/models/daily_log.dart';
 import '../../../core/models/sos_event.dart';
 import '../../../core/models/user_profile.dart';
@@ -85,8 +86,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
                     Text('Telefon: ${profile.phoneNumber}'),
                   if (profile.diagnosisNotes != null && profile.diagnosisNotes!.isNotEmpty)
                     Text('Tanı: ${profile.diagnosisNotes}'),
-                  if (profile.medications.isNotEmpty)
-                    Text('İlaçlar: ${profile.medications.join(', ')}'),
+                  _PatientMedicationsLine(patientId: widget.patientId),
                 ],
               ),
             ),
@@ -103,6 +103,31 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PatientMedicationsLine extends StatelessWidget {
+  const _PatientMedicationsLine({required this.patientId});
+
+  final String patientId;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('medications').where('userId', isEqualTo: patientId).snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData || snap.data!.docs.isEmpty) return const SizedBox.shrink();
+        final labels = snap.data!.docs.map((d) {
+          final med = Medication.fromDoc(d);
+          final times = med.timesLabel.isEmpty ? 'saat yok' : med.timesLabel;
+          return '${med.name} ($times)';
+        }).join(', ');
+        return Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text('İlaçlar: $labels'),
+        );
+      },
     );
   }
 }

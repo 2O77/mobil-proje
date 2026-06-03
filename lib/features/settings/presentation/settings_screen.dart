@@ -21,7 +21,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _diagnosis = TextEditingController();
-  final _meds = TextEditingController();
   String? _therapistSelection;
   final _caregiver = TextEditingController();
   var _busy = false;
@@ -32,7 +31,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _name.text = p.displayName ?? '';
     _phone.text = p.phoneNumber ?? '';
     _diagnosis.text = p.diagnosisNotes ?? '';
-    _meds.text = p.medications.join(', ');
     _therapistSelection = p.linkedTherapistId;
     _caregiver.clear();
     _hydratedUid = uid;
@@ -43,7 +41,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _name.dispose();
     _phone.dispose();
     _diagnosis.dispose();
-    _meds.dispose();
     _caregiver.dispose();
     super.dispose();
   }
@@ -100,8 +97,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               if (_isPatientRole(role)) ...[
                 const Divider(height: 32),
                 TextField(controller: _diagnosis, maxLines: 3, decoration: const InputDecoration(labelText: 'Tanı / notlar')),
-                const SizedBox(height: 16),
-                TextField(controller: _meds, decoration: const InputDecoration(labelText: 'İlaçlar (virgülle)')),
+                const SizedBox(height: 8),
+                Text(
+                  'İlaçları Takvim → İlaçlar sekmesinden saatleriyle birlikte ekleyin.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
                 const SizedBox(height: 20),
                 FilledButton.tonal(
                   onPressed: _busy ? null : () => _saveClinical(uid),
@@ -215,9 +215,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         'phoneNumber': _phone.text.trim(),
       };
       if (_isPatientRole(role)) {
-        final meds = _meds.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
         data['diagnosisNotes'] = _diagnosis.text.trim();
-        data['medications'] = meds;
+        data['medications'] = <String>[];
       }
       await FirebaseFirestore.instance.collection('users').doc(uid).set(data, SetOptions(merge: true));
       final token = await FirebaseMessaging.instance.getToken();
@@ -233,10 +232,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _saveClinical(String uid) async {
     setState(() => _busy = true);
     try {
-      final meds = _meds.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'diagnosisNotes': _diagnosis.text.trim(),
-        'medications': meds,
+        'medications': <String>[],
       }, SetOptions(merge: true));
     } finally {
       if (mounted) setState(() => _busy = false);

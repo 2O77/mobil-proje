@@ -4,9 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/medication.dart';
 import '../../../core/models/routine.dart';
 import '../../../core/providers/subject_provider.dart';
-import '../../../core/services/notification_service.dart';
+import '../../../core/services/medication_notification_service.dart';
 
 class CalendarHubScreen extends ConsumerStatefulWidget {
   const CalendarHubScreen({super.key});
@@ -131,6 +132,8 @@ class _MedicationsTab extends ConsumerStatefulWidget {
 }
 
 class _MedicationsTabState extends ConsumerState<_MedicationsTab> {
+  String? _lastSyncKey;
+
   @override
   Widget build(BuildContext context) {
     final subject = ref.watch(effectiveSubjectIdProvider);
@@ -151,21 +154,35 @@ class _MedicationsTabState extends ConsumerState<_MedicationsTab> {
             stream: q.snapshots(),
             builder: (context, snap) {
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-              final docs = snap.data!.docs;
-              if (docs.isEmpty) return const Center(child: Text('İlaç yok'));
+              final meds = snap.data!.docs.map(Medication.fromDoc).toList();
+              final syncKey = '$subject:${meds.map((m) => '${m.id}:${m.timesLabel}').join('|')}';
+              if (_lastSyncKey != syncKey) {
+                _lastSyncKey = syncKey;
+                MedicationNotificationService.syncAll(meds);
+              }
+              if (meds.isEmpty) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('Henüz ilaç yok.\nSaatleriyle birlikte ekleyin; bildirim alırsınız.'),
+                  ),
+                );
+              }
               return ListView.builder(
-                itemCount: docs.length,
+                itemCount: meds.length,
                 itemBuilder: (_, i) {
-                  final d = docs[i].data();
-                  final name = d['name'] as String? ?? '';
-                  final hour = (d['hour'] as num?)?.toInt() ?? 0;
-                  final minute = (d['minute'] as num?)?.toInt() ?? 0;
+                  final med = meds[i];
                   return ListTile(
-                    title: Text(name),
-                    subtitle: Text('$hour:${minute.toString().padLeft(2, '0')}'),
+                    title: Text(med.name),
+                    subtitle: Text(
+                      med.times.isEmpty ? 'Saat tanımlı değil' : 'Saatler: ${med.timesLabel}',
+                    ),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline),
-                      onPressed: () => docs[i].reference.delete(),
+                      onPressed: () async {
+                        await MedicationNotificationService.cancel(med.id, med.times.length + 8);
+                        await snap.data!.docs[i].reference.delete();
+                      },
                     ),
                   );
                 },
@@ -179,45 +196,90 @@ class _MedicationsTabState extends ConsumerState<_MedicationsTab> {
 
   Future<void> _addMed(BuildContext context, String subject) async {
     final name = TextEditingController();
-    TimeOfDay time = TimeOfDay.now();
+    final times = <MedicationTime>[];
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
-          title: const Text('İlaç'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: name, decoration: const InputDecoration(labelText: 'Ad')),
-              ListTile(
-                title: const Text('Saat'),
-                subtitle: Text(time.format(ctx)),
-                onTap: () async {
-                  final t = await showTimePicker(context: ctx, initialTime: time);
-                  if (t != null) setS(() => time = t);
-                },
-              ),
-            ],
+          title: const Text('İlaç ekle'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: const InputDecoration(labelText: 'İlaç adı'),
+                  onChanged: (_) => setS(() {}),
+                ),
+                const SizedBox(height: 12),
+                const Text('Alınacak saatler', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                if (times.isEmpty)
+                  const Text('En az bir saat ekleyin.', style: TextStyle(fontSize: 13))
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (var i = 0; i < times.length; i++)
+                        InputChip(
+                          label: Text(times[i].label),
+                          onDeleted: () => setS(() => times.removeAt(i)),
+                        ),
+                    ],
+                  ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final t = await showTimePicker(context: ctx, initialTime: TimeOfDay.now());
+                    if (t == null) return;
+                    final duplicate = times.any((e) => e.hour == t.hour && e.minute == t.minute);
+                    if (duplicate) return;
+                    setS(() => times.add(MedicationTime(hour: t.hour, minute: t.minute)));
+                  },
+                  icon: const Icon(Icons.schedule),
+                  label: const Text('Saat ekle'),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Kaydet')),
+            FilledButton(
+              onPressed: name.text.trim().isEmpty || times.isEmpty ? null : () => Navigator.pop(ctx, true),
+              child: const Text('Kaydet'),
+            ),
           ],
         ),
       ),
     );
-    if (ok == true && name.text.trim().isNotEmpty) {
-      final doc = await FirebaseFirestore.instance.collection('medications').add({
-        'userId': subject,
-        'name': name.text.trim(),
-        'hour': time.hour,
-        'minute': time.minute,
-        'enabled': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      final notifId = doc.id.hashCode.abs() % 2000000000;
-      await NotificationService.scheduleMedication(notifId, name.text.trim(), time.hour, time.minute);
-    }
+    if (ok != true || name.text.trim().isEmpty || times.isEmpty) return;
+
+    times.sort((a, b) {
+      final ah = a.hour * 60 + a.minute;
+      final bh = b.hour * 60 + b.minute;
+      return ah.compareTo(bh);
+    });
+
+    final doc = await FirebaseFirestore.instance.collection('medications').add({
+      'userId': subject,
+      'name': name.text.trim(),
+      'times': times.map((t) => t.toMap()).toList(),
+      'enabled': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    final med = Medication(
+      id: doc.id,
+      userId: subject,
+      name: name.text.trim(),
+      times: times,
+    );
+    await MedicationNotificationService.schedule(med);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${med.name} için ${times.length} hatırlatıcı ayarlandı')),
+    );
   }
 }
 
