@@ -9,11 +9,11 @@ import '../../../core/providers/session_provider.dart';
 import '../../../core/providers/sos_alert_provider.dart';
 import '../../behavior/presentation/daily_log_screen.dart';
 import '../../calendar/presentation/calendar_hub_screen.dart';
-import '../../profile/presentation/profile_screen.dart';
+import '../../settings/presentation/settings_screen.dart';
 import '../../sos/presentation/sos_screen.dart';
 import '../../therapist/presentation/messages_screen.dart';
+import '../../therapist/presentation/therapist_dashboard_screen.dart';
 import '../../therapist/presentation/therapist_patients_screen.dart';
-import '../../therapist/presentation/therapist_reports_screen.dart';
 import '../../therapist/presentation/therapist_sos_alert_widgets.dart';
 import '../../therapist/presentation/therapist_sos_screen.dart';
 import '../../therapist/presentation/therapist_hub_screen.dart';
@@ -54,7 +54,7 @@ class _PrimaryHomeShellState extends State<_PrimaryHomeShell> {
       const CalendarHubScreen(),
       const TherapistHubScreen(),
       const SosScreen(),
-      const ProfileScreen(),
+      const SettingsScreen(),
     ];
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
@@ -66,7 +66,7 @@ class _PrimaryHomeShellState extends State<_PrimaryHomeShell> {
           NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Takvim'),
           NavigationDestination(icon: Icon(Icons.medical_services_outlined), selectedIcon: Icon(Icons.medical_services), label: 'Terapist'),
           NavigationDestination(icon: Icon(Icons.sos_outlined), selectedIcon: Icon(Icons.sos), label: 'SOS'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profil'),
+          NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Ayarlar'),
         ],
       ),
     );
@@ -104,11 +104,11 @@ class _TherapistHomeShellState extends ConsumerState<TherapistHomeShell> {
     final index = ref.watch(therapistHomeTabProvider);
     final activeCount = ref.watch(therapistActiveSosProvider).maybeWhen(data: (d) => d.length, orElse: () => 0);
     final pages = <Widget>[
+      const TherapistDashboardScreen(),
       const TherapistPatientsScreen(),
       const MessagesScreen(),
       const TherapistSosScreen(),
-      const TherapistReportsScreen(),
-      const ProfileScreen(),
+      const SettingsScreen(),
     ];
     return Scaffold(
       body: Column(
@@ -121,6 +121,7 @@ class _TherapistHomeShellState extends ConsumerState<TherapistHomeShell> {
         selectedIndex: index,
         onDestinationSelected: (i) => ref.read(therapistHomeTabProvider.notifier).select(i),
         destinations: [
+          const NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Özet'),
           const NavigationDestination(icon: Icon(Icons.groups_outlined), selectedIcon: Icon(Icons.groups), label: 'Danışanlar'),
           const NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: 'Mesajlar'),
           NavigationDestination(
@@ -136,8 +137,7 @@ class _TherapistHomeShellState extends ConsumerState<TherapistHomeShell> {
             ),
             label: 'SOS',
           ),
-          const NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description), label: 'Raporlar'),
-          const NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profil'),
+          const NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Ayarlar'),
         ],
       ),
     );

@@ -34,11 +34,11 @@ class FcmService {
     if (data['type'] != 'sos') return;
     final patientId = data['patientId'] as String?;
     if (patientId == null || patientId.isEmpty) {
-      ref.read(therapistHomeTabProvider.notifier).select(2);
+      ref.read(therapistHomeTabProvider.notifier).select(3);
       return;
     }
     ref.read(therapistPatientSubjectProvider.notifier).select(patientId);
-    ref.read(therapistHomeTabProvider.notifier).select(2);
+    ref.read(therapistHomeTabProvider.notifier).select(3);
   }
 }
 

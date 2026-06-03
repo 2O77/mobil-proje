@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/sos_alert_provider.dart';
 import '../../../core/providers/subject_provider.dart';
+import 'patient_detail_screen.dart';
 
 class TherapistPatientsScreen extends ConsumerWidget {
   const TherapistPatientsScreen({super.key});
@@ -23,7 +24,7 @@ class TherapistPatientsScreen extends ConsumerWidget {
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(16),
-                child: Text('Size bağlı danışan yok. Danışan profilinden sizi terapist olarak seçmelidir.'),
+                child: Text('Size bağlı danışan yok. Danışan ayarlardan sizi terapist olarak seçmelidir.'),
               ),
             );
           }
@@ -37,7 +38,8 @@ class TherapistPatientsScreen extends ConsumerWidget {
                 future: FirebaseFirestore.instance.collection('users').doc(patientId).get(),
                 builder: (context, snap) {
                   final data = snap.data?.data();
-                  final displayName = (data?['displayName'] as String?) ?? patientId;
+                  final displayName = (data?['displayName'] as String?) ?? 'Danışan';
+                  final phone = data?['phoneNumber'] as String?;
                   final picked = selected == patientId || (selected == null && i == 0);
                   final avatarText = displayName.isEmpty ? '?' : displayName.substring(0, 1);
                   return Card(
@@ -69,9 +71,14 @@ class TherapistPatientsScreen extends ConsumerWidget {
                             ),
                         ],
                       ),
-                      subtitle: Text('UID: $patientId'),
+                      subtitle: phone != null && phone.isNotEmpty ? Text(phone) : null,
                       trailing: picked ? const Icon(Icons.check_circle) : const Icon(Icons.chevron_right),
-                      onTap: () => ref.read(therapistPatientSubjectProvider.notifier).select(patientId),
+                      onTap: () {
+                        ref.read(therapistPatientSubjectProvider.notifier).select(patientId);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => PatientDetailScreen(patientId: patientId)),
+                        );
+                      },
                     ),
                   );
                 },

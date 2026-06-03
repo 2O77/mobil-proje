@@ -45,5 +45,5 @@ Future<void> acknowledgeSosEvent(String eventId) async {
 
 void openTherapistSosAlert(WidgetRef ref, {required String patientId}) {
   ref.read(therapistPatientSubjectProvider.notifier).select(patientId);
-  ref.read(therapistHomeTabProvider.notifier).select(2);
+  ref.read(therapistHomeTabProvider.notifier).select(3);
 }

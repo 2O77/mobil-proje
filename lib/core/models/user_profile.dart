@@ -35,6 +35,7 @@ class UserProfile {
     this.linkedTherapistId,
     this.photoUrl,
     this.fcmToken,
+    this.phoneNumber,
   });
 
   final String uid;
@@ -46,6 +47,7 @@ class UserProfile {
   final String? linkedTherapistId;
   final String? photoUrl;
   final String? fcmToken;
+  final String? phoneNumber;
 
   factory UserProfile.fromDoc(String uid, Map<String, dynamic> data) {
     return UserProfile(
@@ -58,6 +60,7 @@ class UserProfile {
       linkedTherapistId: data['linkedTherapistId'] as String?,
       photoUrl: data['photoUrl'] as String?,
       fcmToken: data['fcmToken'] as String?,
+      phoneNumber: data['phoneNumber'] as String?,
     );
   }
 
@@ -70,6 +73,7 @@ class UserProfile {
         if (linkedTherapistId != null) 'linkedTherapistId': linkedTherapistId,
         if (photoUrl != null) 'photoUrl': photoUrl,
         if (fcmToken != null) 'fcmToken': fcmToken,
+        if (phoneNumber != null) 'phoneNumber': phoneNumber,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 }
