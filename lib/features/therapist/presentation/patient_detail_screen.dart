@@ -15,7 +15,6 @@ import '../../../core/providers/sos_alert_provider.dart';
 import '../../../core/providers/subject_provider.dart';
 import 'sos_pulse_indicator.dart';
 import '../../../core/services/conversation_service.dart';
-import '../../../core/services/session_report_pdf_service.dart';
 import '../../../core/services/sos_location_service.dart';
 import 'messages_screen.dart';
 import 'session_report_card.dart';
@@ -307,7 +306,6 @@ class _ReportsTabState extends State<_ReportsTab> {
         'body': body,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      await openSessionReportPdf(title: title, body: body, sessionDate: DateTime.now());
       if (!mounted) return;
       _body.clear();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Seans raporu gönderildi')));

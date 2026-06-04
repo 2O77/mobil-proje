@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/subject_provider.dart';
-import '../../../core/services/session_report_pdf_service.dart';
 import 'session_report_card.dart';
 
 class SessionPdfScreen extends ConsumerStatefulWidget {
@@ -42,7 +41,9 @@ class _SessionPdfScreenState extends ConsumerState<SessionPdfScreen> {
         'body': body,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      await openSessionReportPdf(title: title, body: body, sessionDate: DateTime.now());
+      if (!mounted) return;
+      _body.clear();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rapor kaydedildi')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
@@ -84,7 +85,7 @@ class _SessionPdfScreenState extends ConsumerState<SessionPdfScreen> {
               icon: _saving
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.save_alt_outlined),
-              label: Text(_saving ? 'Kaydediliyor...' : 'Kaydet ve PDF indir'),
+              label: Text(_saving ? 'Kaydediliyor...' : 'Kaydet'),
             ),
             const Divider(height: 32),
           ],
