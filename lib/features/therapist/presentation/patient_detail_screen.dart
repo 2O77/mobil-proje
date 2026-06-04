@@ -15,6 +15,7 @@ import '../../../core/providers/sos_alert_provider.dart';
 import '../../../core/providers/subject_provider.dart';
 import 'sos_pulse_indicator.dart';
 import '../../../core/services/conversation_service.dart';
+import '../../../core/services/session_report_pdf_service.dart';
 import '../../../core/services/sos_location_service.dart';
 import 'messages_screen.dart';
 import 'session_report_card.dart';
@@ -269,21 +270,83 @@ class _SosTab extends ConsumerWidget {
   }
 }
 
-class _ReportsTab extends StatelessWidget {
+class _ReportsTab extends StatefulWidget {
   const _ReportsTab({required this.patientId});
 
   final String patientId;
 
   @override
+  State<_ReportsTab> createState() => _ReportsTabState();
+}
+
+class _ReportsTabState extends State<_ReportsTab> {
+  final _title = TextEditingController(text: 'Seans özeti');
+  final _body = TextEditingController();
+  var _saving = false;
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _body.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendReport() async {
+    if (_saving) return;
+    final me = FirebaseAuth.instance.currentUser?.uid;
+    final title = _title.text.trim();
+    final body = _body.text.trim();
+    if (me == null || title.isEmpty || body.isEmpty) return;
+
+    setState(() => _saving = true);
+    try {
+      await FirebaseFirestore.instance.collection('session_reports').add({
+        'subjectUserId': widget.patientId,
+        'authorId': me,
+        'title': title,
+        'body': body,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      await openSessionReportPdf(title: title, body: body, sessionDate: DateTime.now());
+      if (!mounted) return;
+      _body.clear();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Seans raporu gönderildi')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gönderilemedi: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final sessionReportsQuery =
-        FirebaseFirestore.instance.collection('session_reports').where('subjectUserId', isEqualTo: patientId).limit(50);
-    final assessmentsQuery =
-        FirebaseFirestore.instance.collection('assessments').where('subjectUserId', isEqualTo: patientId).limit(50);
+    final sessionReportsQuery = FirebaseFirestore.instance
+        .collection('session_reports')
+        .where('subjectUserId', isEqualTo: widget.patientId)
+        .limit(50);
+    final assessmentsQuery = FirebaseFirestore.instance
+        .collection('assessments')
+        .where('subjectUserId', isEqualTo: widget.patientId)
+        .limit(50);
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const Text('Seans raporu gönder', style: TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
+        TextField(controller: _title, decoration: const InputDecoration(labelText: 'Başlık')),
+        const SizedBox(height: 12),
+        TextField(controller: _body, maxLines: 6, decoration: const InputDecoration(labelText: 'Rapor metni')),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: _saving ? null : _sendReport,
+          icon: _saving
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.send_outlined),
+          label: Text(_saving ? 'Gönderiliyor...' : 'Danışana gönder'),
+        ),
+        const Divider(height: 32),
         const Text('Seans raporları', style: TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(

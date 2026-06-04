@@ -3,8 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/models/user_profile.dart';
-import '../../../core/providers/session_provider.dart';
 import '../../../core/providers/subject_provider.dart';
 import '../../../core/services/session_report_pdf_service.dart';
 import 'session_report_card.dart';
@@ -68,18 +66,15 @@ class _SessionPdfScreenState extends ConsumerState<SessionPdfScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final sessionAsync = ref.watch(sessionStreamProvider);
-    final role = sessionAsync.value?.profile?.role;
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    final isTherapist = role == AppUserRole.therapist;
-    final subjectUserId = isTherapist ? ref.watch(effectiveSubjectIdProvider) : uid;
+    final subjectUserId = ref.watch(effectiveSubjectIdProvider) ?? uid;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Seans raporları')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (isTherapist) ...[
+          if (uid != null) ...[
             TextField(controller: _title, decoration: const InputDecoration(labelText: 'Başlık')),
             const SizedBox(height: 12),
             TextField(controller: _body, maxLines: 10, decoration: const InputDecoration(labelText: 'Not metni')),
