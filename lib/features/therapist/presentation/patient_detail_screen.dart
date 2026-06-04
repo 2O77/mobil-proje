@@ -9,6 +9,7 @@ import '../../../core/models/medication.dart';
 import '../../../core/models/daily_log.dart';
 import '../../../core/models/sos_event.dart';
 import '../../../core/models/user_profile.dart';
+import '../../../core/providers/therapist_clinical_provider.dart';
 import '../../../core/providers/patient_profile_provider.dart';
 import '../../../core/providers/sos_alert_provider.dart';
 import '../../../core/providers/subject_provider.dart';
@@ -33,7 +34,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
     _tabs.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(therapistPatientSubjectProvider.notifier).select(widget.patientId);
@@ -51,7 +52,8 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
     final profileAsync = ref.watch(patientProfileProvider(widget.patientId));
     final profile = profileAsync.value ?? UserProfile(uid: widget.patientId);
     final name = profile.displayName ?? 'Danışan';
-    final showClinicalHeader = _tabs.index != 3;
+    final clinicalAsync = ref.watch(therapistClinicalProvider(widget.patientId));
+    final showClinicalHeader = _tabs.index != 4;
     final hasActiveSos = ref.watch(patientHasActiveSosProvider(widget.patientId));
 
     return Scaffold(
@@ -69,6 +71,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
           controller: _tabs,
           tabs: const [
             Tab(text: 'Günlük'),
+            Tab(text: 'Klinik'),
             Tab(text: 'SOS'),
             Tab(text: 'Raporlar'),
             Tab(text: 'Mesaj'),
@@ -86,6 +89,17 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
                 children: [
                   if (profile.phoneNumber != null && profile.phoneNumber!.isNotEmpty)
                     Text('Telefon: ${profile.phoneNumber}'),
+                  clinicalAsync.when(
+                    data: (record) {
+                      if (record == null || record.diagnosis.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text('Tanı: ${record.diagnosis}'),
+                      );
+                    },
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
+                  ),
                   _PatientMedicationsLine(patientId: widget.patientId),
                 ],
               ),
@@ -95,6 +109,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
               index: _tabs.index,
               children: [
                 _DailyLogsTab(patientId: widget.patientId),
+                _ClinicalTab(patientId: widget.patientId),
                 _SosTab(patientId: widget.patientId),
                 _ReportsTab(patientId: widget.patientId),
                 _MessageTab(patientId: widget.patientId),
@@ -317,6 +332,145 @@ class _ReportsTab extends StatelessWidget {
                     leading: const Icon(Icons.assignment_outlined),
                     title: Text((data['type'] as String?) ?? 'assessment'),
                     subtitle: Text('${answers.length} cevap kaydı'),
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _ClinicalTab extends ConsumerStatefulWidget {
+  const _ClinicalTab({required this.patientId});
+
+  final String patientId;
+
+  @override
+  ConsumerState<_ClinicalTab> createState() => _ClinicalTabState();
+}
+
+class _ClinicalTabState extends ConsumerState<_ClinicalTab> {
+  final _diagnosis = TextEditingController();
+  final _note = TextEditingController();
+  var _savingDiagnosis = false;
+  var _addingNote = false;
+  String? _loadedDiagnosis;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual(therapistClinicalProvider(widget.patientId), (previous, next) {
+      next.whenData((record) {
+        final diagnosis = record?.diagnosis ?? '';
+        if (_loadedDiagnosis == diagnosis) return;
+        _loadedDiagnosis = diagnosis;
+        _diagnosis.text = diagnosis;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _diagnosis.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveDiagnosis() async {
+    if (_savingDiagnosis) return;
+    setState(() => _savingDiagnosis = true);
+    try {
+      await saveTherapistDiagnosis(patientId: widget.patientId, diagnosis: _diagnosis.text);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tanı kaydedildi')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+    } finally {
+      if (mounted) setState(() => _savingDiagnosis = false);
+    }
+  }
+
+  Future<void> _addNote() async {
+    final text = _note.text.trim();
+    if (text.isEmpty || _addingNote) return;
+    setState(() => _addingNote = true);
+    try {
+      await addTherapistClinicalNote(patientId: widget.patientId, text: text);
+      _note.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Not eklendi')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Not eklenemedi: $e')));
+    } finally {
+      if (mounted) setState(() => _addingNote = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final notesAsync = ref.watch(therapistClinicalNotesProvider(widget.patientId));
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Tanı', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _diagnosis,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: 'Danışan tanısı (yalnızca koç görür)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.tonal(
+          onPressed: _savingDiagnosis ? null : _saveDiagnosis,
+          child: Text(_savingDiagnosis ? 'Kaydediliyor...' : 'Tanıyı kaydet'),
+        ),
+        const Divider(height: 32),
+        Text('Klinik notlar', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _note,
+          minLines: 2,
+          maxLines: 6,
+          decoration: const InputDecoration(
+            hintText: 'Yeni not',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: _addingNote ? null : _addNote,
+          child: Text(_addingNote ? 'Ekleniyor...' : 'Not ekle'),
+        ),
+        const SizedBox(height: 20),
+        notesAsync.when(
+          loading: () => const LinearProgressIndicator(),
+          error: (e, _) => Text('Notlar alınamadı: $e'),
+          data: (notes) {
+            if (notes.isEmpty) return const Text('Henüz klinik not yok.');
+            return Column(
+              children: notes.map((n) {
+                final when = n.createdAt == null ? '' : DateFormat('dd.MM.yyyy HH:mm').format(n.createdAt!);
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    title: Text(n.text),
+                    subtitle: when.isEmpty ? null : Text(when),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => deleteTherapistClinicalNote(
+                        patientId: widget.patientId,
+                        noteId: n.id,
+                      ),
+                    ),
                   ),
                 );
               }).toList(),

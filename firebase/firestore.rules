@@ -166,5 +166,22 @@ service cloud.firestore {
         && request.resource.data.authorId == request.auth.uid;
       allow update, delete: if signedIn() && resource.data.authorId == request.auth.uid;
     }
+
+    match /therapist_clinical/{patientId} {
+      allow read: if isTherapistOf(patientId);
+      allow create, update: if isTherapistOf(patientId)
+        && request.resource.data.patientId == patientId
+        && request.resource.data.therapistId == request.auth.uid;
+      allow delete: if isTherapistOf(patientId);
+
+      match /notes/{noteId} {
+        allow read: if isTherapistOf(patientId);
+        allow create: if isTherapistOf(patientId)
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0;
+        allow delete: if isTherapistOf(patientId) && resource.data.authorId == request.auth.uid;
+      }
+    }
   }
 }
