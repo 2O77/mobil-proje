@@ -6,7 +6,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'app.dart';
 import 'core/services/notification_service.dart';
-import 'core/services/sos_background_service.dart';
 import 'firebase_options.dart';
 
 Future<void> _ensureFirebaseInitialized() async {
@@ -18,6 +17,15 @@ Future<void> _ensureFirebaseInitialized() async {
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await _ensureFirebaseInitialized();
+  try {
+    await NotificationService.init();
+  } catch (_) {}
+  if (message.data['type'] != 'sos') return;
+  await NotificationService.showSosAlert(
+    title: message.notification?.title ?? 'SOS Alarmı',
+    body: message.notification?.body ?? 'Danışan SOS gönderdi',
+    payload: message.data['patientId'] as String?,
+  );
 }
 
 Future<void> main() async {
@@ -48,11 +56,6 @@ Future<void> main() async {
     await NotificationService.init();
   } catch (e, st) {
     debugPrint('NotificationService init: $e\n$st');
-  }
-  try {
-    await SosBackgroundService.init();
-  } catch (e, st) {
-    debugPrint('SosBackgroundService init: $e\n$st');
   }
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   runApp(const ProviderScope(child: AutiCareApp()));
