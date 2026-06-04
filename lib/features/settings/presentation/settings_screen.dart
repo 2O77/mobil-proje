@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/user_profile.dart';
 import '../../../core/providers/session_provider.dart';
 import '../../../core/providers/subject_provider.dart';
+import '../../../core/services/sos_background_service.dart';
 import '../../../core/providers/therapists_directory_provider.dart';
 import '../../../core/services/conversation_service.dart';
 
@@ -20,7 +21,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
-  final _diagnosis = TextEditingController();
   String? _therapistSelection;
   final _caregiver = TextEditingController();
   var _busy = false;
@@ -30,7 +30,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (p == null || _hydratedUid == uid) return;
     _name.text = p.displayName ?? '';
     _phone.text = p.phoneNumber ?? '';
-    _diagnosis.text = p.diagnosisNotes ?? '';
     _therapistSelection = p.linkedTherapistId;
     _caregiver.clear();
     _hydratedUid = uid;
@@ -40,7 +39,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void dispose() {
     _name.dispose();
     _phone.dispose();
-    _diagnosis.dispose();
     _caregiver.dispose();
     super.dispose();
   }
@@ -96,17 +94,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               if (_isPatientRole(role)) ...[
                 const Divider(height: 32),
-                TextField(controller: _diagnosis, maxLines: 3, decoration: const InputDecoration(labelText: 'Tanı / notlar')),
-                const SizedBox(height: 8),
                 Text(
                   'İlaçları Takvim → İlaçlar sekmesinden saatleriyle birlikte ekleyin.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 20),
-                FilledButton.tonal(
-                  onPressed: _busy ? null : () => _saveClinical(uid),
-                  child: const Text('Sağlık bilgilerini kaydet'),
-                ),
                 const Divider(height: 32),
                 ref.watch(therapistsDirectoryProvider).when(
                   data: (list) {
@@ -196,6 +188,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 onPressed: () async {
                   ref.read(selectedSubjectIdProvider.notifier).select(null);
                   ref.read(therapistPatientSubjectProvider.notifier).select(null);
+                  await SosBackgroundService.stop();
                   await FirebaseAuth.instance.signOut();
                 },
                 child: const Text('Çıkış yap'),
@@ -215,7 +208,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         'phoneNumber': _phone.text.trim(),
       };
       if (_isPatientRole(role)) {
-        data['diagnosisNotes'] = _diagnosis.text.trim();
         data['medications'] = <String>[];
       }
       await FirebaseFirestore.instance.collection('users').doc(uid).set(data, SetOptions(merge: true));
@@ -224,18 +216,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         await FirebaseFirestore.instance.collection('users').doc(uid).set({'fcmToken': token}, SetOptions(merge: true));
       }
       await FirebaseMessaging.instance.requestPermission();
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _saveClinical(String uid) async {
-    setState(() => _busy = true);
-    try {
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'diagnosisNotes': _diagnosis.text.trim(),
-        'medications': <String>[],
-      }, SetOptions(merge: true));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

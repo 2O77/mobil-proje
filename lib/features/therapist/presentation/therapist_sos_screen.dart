@@ -7,6 +7,7 @@ import '../../../core/models/sos_event.dart';
 import '../../../core/providers/patient_profile_provider.dart';
 import '../../../core/providers/sos_alert_provider.dart';
 import '../../../core/providers/subject_provider.dart';
+import '../../../core/services/sos_location_service.dart';
 
 class TherapistSosScreen extends ConsumerWidget {
   const TherapistSosScreen({super.key});
@@ -52,7 +53,7 @@ class _ActiveSosCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final when = event.createdAt == null ? '-' : DateFormat('dd.MM.yyyy HH:mm').format(event.createdAt!);
-    final loc = event.lat == null || event.lng == null ? 'Konum yok' : '${event.lat}, ${event.lng}';
+    final loc = formatSosCoordinates(event.lat, event.lng);
     final name = ref.watch(patientProfileProvider(event.userId)).value?.displayName ?? 'Danışan';
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -114,7 +115,7 @@ class _SosEventsList extends StatelessWidget {
           children: docs.map((doc) {
             final event = SosEvent.fromDoc(doc);
             final when = event.createdAt == null ? '-' : DateFormat('dd.MM.yyyy HH:mm').format(event.createdAt!);
-            final loc = event.lat == null || event.lng == null ? 'Konum yok' : '${event.lat}, ${event.lng}';
+            final loc = formatSosCoordinates(event.lat, event.lng);
             final isActive = event.isActive;
             return Card(
               margin: const EdgeInsets.only(bottom: 8),

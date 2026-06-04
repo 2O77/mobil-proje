@@ -66,7 +66,12 @@ class NotificationService {
     return true;
   }
 
+  static Future<bool> ensureSosPermissions() async {
+    return await _android?.requestNotificationsPermission() ?? true;
+  }
+
   static Future<void> showSosAlert({required String title, required String body, String? payload}) async {
+    await ensureSosPermissions();
     await _plugin.show(
       id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       title: title,

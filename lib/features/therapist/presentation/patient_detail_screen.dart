@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/models/medication.dart';
 import '../../../core/models/daily_log.dart';
@@ -13,6 +14,7 @@ import '../../../core/providers/sos_alert_provider.dart';
 import '../../../core/providers/subject_provider.dart';
 import 'sos_pulse_indicator.dart';
 import '../../../core/services/conversation_service.dart';
+import '../../../core/services/sos_location_service.dart';
 import 'messages_screen.dart';
 import 'session_report_card.dart';
 
@@ -84,8 +86,6 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> with 
                 children: [
                   if (profile.phoneNumber != null && profile.phoneNumber!.isNotEmpty)
                     Text('Telefon: ${profile.phoneNumber}'),
-                  if (profile.diagnosisNotes != null && profile.diagnosisNotes!.isNotEmpty)
-                    Text('Tanı: ${profile.diagnosisNotes}'),
                   _PatientMedicationsLine(patientId: widget.patientId),
                 ],
               ),
@@ -204,7 +204,8 @@ class _SosTab extends ConsumerWidget {
           itemBuilder: (_, i) {
             final event = SosEvent.fromDoc(docs[i]);
             final when = event.createdAt == null ? '-' : DateFormat('dd.MM.yyyy HH:mm').format(event.createdAt!);
-            final loc = event.lat == null || event.lng == null ? 'Konum yok' : '${event.lat}, ${event.lng}';
+            final loc = formatSosCoordinates(event.lat, event.lng);
+            final mapsUrl = sosMapsUrl(event.lat, event.lng);
             final isActive = event.isActive;
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
@@ -215,9 +216,18 @@ class _SosTab extends ConsumerWidget {
                   color: isActive ? Theme.of(context).colorScheme.onErrorContainer : null,
                 ),
                 title: Text(isActive ? 'Aktif SOS — $when' : 'Kayıt — $when'),
-                subtitle: Text(loc),
-                trailing: isActive
-                    ? TextButton(
+                subtitle: Text('Konum: $loc'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (mapsUrl != null)
+                      IconButton(
+                        icon: const Icon(Icons.map_outlined),
+                        tooltip: 'Haritada aç',
+                        onPressed: () => launchUrl(Uri.parse(mapsUrl)),
+                      ),
+                    if (isActive)
+                      TextButton(
                         onPressed: () async {
                           final result = await tryAcknowledgeSosEvent(event.id);
                           if (!context.mounted) return;
@@ -232,8 +242,9 @@ class _SosTab extends ConsumerWidget {
                           );
                         },
                         child: const Text('Görüldü'),
-                      )
-                    : null,
+                      ),
+                  ],
+                ),
               ),
             );
           },

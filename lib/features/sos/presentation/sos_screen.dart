@@ -5,12 +5,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/providers/patient_profile_provider.dart';
 import '../../../core/providers/subject_provider.dart';
+import '../../../core/services/sos_location_service.dart';
 
 class SosScreen extends ConsumerStatefulWidget {
   const SosScreen({super.key});
@@ -63,24 +63,31 @@ class _SosScreenState extends ConsumerState<SosScreen> {
     if (me == null) return;
     final subjectId = ref.read(effectiveSubjectIdProvider) ?? me;
     final therapistId = ref.read(patientProfileProvider(subjectId)).value?.linkedTherapistId;
-    final perm = await Geolocator.requestPermission();
-    Position? pos;
-    if (perm == LocationPermission.always || perm == LocationPermission.whileInUse) {
-      pos = await Geolocator.getCurrentPosition();
-    }
+
+    final location = await SosLocationCapture.capture();
+    final pos = location.position;
+
     final payload = <String, dynamic>{
       'userId': subjectId,
       'status': 'active',
-      'lat': pos?.latitude,
-      'lng': pos?.longitude,
       'createdAt': FieldValue.serverTimestamp(),
     };
+    if (pos != null) {
+      payload['lat'] = pos.latitude;
+      payload['lng'] = pos.longitude;
+      payload['locationAccuracy'] = pos.accuracy;
+    }
     if (therapistId != null && therapistId.isNotEmpty) {
       payload['therapistId'] = therapistId;
     }
+
     await FirebaseFirestore.instance.collection('sos_events').add(payload);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('SOS kaydı oluşturuldu')));
+
+    final locText = pos == null ? (location.message ?? 'Konum gönderilemedi') : formatSosCoordinates(pos.latitude, pos.longitude);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('SOS gönderildi. Konum: $locText')),
+    );
   }
 
   Future<void> _sms(String body) async {
@@ -92,7 +99,6 @@ class _SosScreenState extends ConsumerState<SosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final subject = ref.watch(effectiveSubjectIdProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('SOS ve acil durum')),
       body: ListView(
@@ -106,7 +112,11 @@ class _SosScreenState extends ConsumerState<SosScreen> {
               child: Text('TEK DOKUNUŞ SOS', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ),
-          if (subject != null) Text('Konum ve olay kaydı kullanıcı: $subject', style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 8),
+          Text(
+            'SOS ile birlikte güncel konumunuz koça iletilir.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 16),
           const Text('Önceden tanımlı mesajlar', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
