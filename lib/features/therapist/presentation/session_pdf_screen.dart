@@ -43,10 +43,10 @@ class _SessionPdfScreenState extends ConsumerState<SessionPdfScreen> {
       });
       if (!mounted) return;
       _body.clear();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rapor kaydedildi')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rapor gönderildi')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gönderilemedi: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -84,8 +84,8 @@ class _SessionPdfScreenState extends ConsumerState<SessionPdfScreen> {
               onPressed: _saving || subjectUserId == null ? null : () => _saveAndExport(subjectUserId),
               icon: _saving
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.save_alt_outlined),
-              label: Text(_saving ? 'Kaydediliyor...' : 'Kaydet'),
+                  : const Icon(Icons.send_outlined),
+              label: Text(_saving ? 'Gönderiliyor...' : 'Gönder'),
             ),
             const Divider(height: 32),
           ],
