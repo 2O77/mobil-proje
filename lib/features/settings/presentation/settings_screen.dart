@@ -21,7 +21,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   String? _therapistSelection;
-  final _caregiver = TextEditingController();
   var _busy = false;
   String? _hydratedUid;
 
@@ -30,7 +29,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _name.text = p.displayName ?? '';
     _phone.text = p.phoneNumber ?? '';
     _therapistSelection = p.linkedTherapistId;
-    _caregiver.clear();
     _hydratedUid = uid;
   }
 
@@ -38,12 +36,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void dispose() {
     _name.dispose();
     _phone.dispose();
-    _caregiver.dispose();
     super.dispose();
   }
 
-  bool _isPatientRole(AppUserRole? role) =>
-      role == AppUserRole.individual || role == AppUserRole.caregiver;
+  bool _isPatientRole(AppUserRole? role) => role == AppUserRole.individual;
 
   @override
   Widget build(BuildContext context) {
@@ -169,18 +165,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: _caregiver,
-                  decoration: const InputDecoration(labelText: 'Bakım veren UID (birey hesabı)'),
-                ),
-                const SizedBox(height: 16),
-                FilledButton.tonal(
-                  onPressed: _busy ? null : () => _addCaregiver(uid),
-                  child: const Text('Bakım veren ekle'),
-                ),
-                const Divider(height: 32),
-                _CaregiverSubjectSwitcher(profile: p),
               ],
               const Divider(height: 32),
               TextButton(
@@ -238,54 +222,5 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<void> _addCaregiver(String uid) async {
-    final id = _caregiver.text.trim();
-    if (id.isEmpty) return;
-    setState(() => _busy = true);
-    try {
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'caregiverIds': FieldValue.arrayUnion([id]),
-      }, SetOptions(merge: true));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-}
-
-class _CaregiverSubjectSwitcher extends ConsumerWidget {
-  const _CaregiverSubjectSwitcher({required this.profile});
-
-  final UserProfile? profile;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (profile?.role != AppUserRole.caregiver) return const SizedBox.shrink();
-    final kids = ref.watch(caregiverSubjectsProvider);
-    return kids.when(
-      data: (list) {
-        if (list.isEmpty) {
-          return const Text('Bağlı birey bulunamadı. Birey hesabından bakım veren olarak sizi eklemesi gerekir.');
-        }
-        final sel = ref.watch(selectedSubjectIdProvider);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Veri girişi için birey', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              initialValue: sel != null && list.contains(sel) ? sel : list.first,
-              items: list.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: (v) {
-                if (v != null) ref.read(selectedSubjectIdProvider.notifier).select(v);
-              },
-            ),
-          ],
-        );
-      },
-      loading: () => const LinearProgressIndicator(),
-      error: (e, _) => Text('$e'),
-    );
   }
 }
