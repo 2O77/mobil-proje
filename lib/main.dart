@@ -6,6 +6,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'app.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/sos_background_service.dart';
 import 'firebase_options.dart';
 
 Future<void> _ensureFirebaseInitialized() async {
@@ -47,6 +48,11 @@ Future<void> main() async {
     await NotificationService.init();
   } catch (e, st) {
     debugPrint('NotificationService init: $e\n$st');
+  }
+  try {
+    await SosBackgroundService.init();
+  } catch (e, st) {
+    debugPrint('SosBackgroundService init: $e\n$st');
   }
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   runApp(const ProviderScope(child: AutiCareApp()));

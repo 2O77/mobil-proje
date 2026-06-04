@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/user_profile.dart';
+import '../../../core/services/notification_service.dart';
+import '../../../core/services/sos_background_service.dart';
 import '../../../core/providers/session_provider.dart';
 import '../../../core/providers/sos_alert_provider.dart';
 import '../../behavior/presentation/daily_log_screen.dart';
@@ -80,7 +82,17 @@ class _TherapistHomeShellState extends ConsumerState<TherapistHomeShell> {
   @override
   void initState() {
     super.initState();
+    _startSosWatch();
     _syncFcmToken();
+  }
+
+  Future<void> _startSosWatch() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      await NotificationService.ensureSosPermissions();
+      await SosBackgroundService.startForTherapist(uid);
+    } catch (_) {}
   }
 
   Future<void> _syncFcmToken() async {

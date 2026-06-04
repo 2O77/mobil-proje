@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/services/fcm_service.dart';
 import 'core/services/medication_reminder_init.dart';
+import 'core/services/sos_notification_init.dart';
 import 'core/theme/app_theme.dart';
 
 class AutiCareApp extends ConsumerWidget {
@@ -13,6 +14,7 @@ class AutiCareApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(fcmInitProvider);
     ref.watch(medicationRemindersInitProvider);
+    ref.watch(sosNotificationInitProvider);
     final router = ref.watch(goRouterProvider);
     return MaterialApp.router(
       title: 'AutiCare',
